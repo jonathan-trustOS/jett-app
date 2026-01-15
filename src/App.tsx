@@ -1317,7 +1317,7 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
 
 // Trial banner component
 // Stripe configuration
-const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/test_9B69AT1Bn1Tp7MQdnPb7y00'
+const STRIPE_PAYMENT_LINK = 'https://buy.stripe.com/9B614o1hR6wa1xT74GcIE00'
 
 function TrialBanner() {
   const { trialDaysLeft, isTrialing, isPastDue } = useSubscription()
