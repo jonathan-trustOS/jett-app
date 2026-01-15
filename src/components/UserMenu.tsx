@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useAuth, useSubscription } from '../contexts/AuthContext'
 
 // Stripe Customer Portal - users manage subscription here
-const STRIPE_CUSTOMER_PORTAL = 'https://billing.stripe.com/p/login/test_9B69AT1Bn1Tp7MQdnPb7y00'
+const STRIPE_CUSTOMER_PORTAL = 'https://billing.stripe.com/p/login/9B614o1hR6wa1xT74GcIE00'
 
 export default function UserMenu() {
   const { user, signOut, resetPassword } = useAuth()
