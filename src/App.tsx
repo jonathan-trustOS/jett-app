@@ -1,4 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react'
+import { TermsOfService } from './components/legal/TermsOfService';
 import ProjectList from './components/ProjectList'
 import PRDForm from './components/PRDForm'
 import PRDCanvas from './components/PRDCanvas'
@@ -9,6 +10,8 @@ import FigmaImportModal from './components/FigmaImportModal'
 import BrainstormView from './components/BrainstormView'
 import TemplateGallery, { TEMPLATES } from './components/TemplateGallery'
 import UserMenu from './components/UserMenu'
+import HistoryView from './components/HistoryView'
+import HelpPanel, { HelpBubble } from './components/HelpPanel'
 import { IconDocument, IconFolder as IconCanvas, IconCode } from './components/Icons'
 import { AuthProvider, useAuth, useSubscription } from './contexts/AuthContext'
 import AuthScreen from './components/auth/AuthScreen'
@@ -116,6 +119,15 @@ interface Review {
   completedAt?: string
 }
 
+interface PublishedVersion {
+  id: string
+  published_at: string
+  description: string
+  url: string
+  screenshot?: string
+  files: Record<string, string>
+}
+
 interface Project {
   id: string
   name: string
@@ -132,11 +144,12 @@ interface Project {
   versionHistory: VersionEntry[]
   suggestions: Suggestion[]
   review: Review  // NEW: Code review results
+  published_versions?: PublishedVersion[]  // NEW: History tab versions
   createdAt: string
   updatedAt: string
 }
 
-type View = 'projects' | 'ideas' | 'prd' | 'build' | 'review'
+type View = 'projects' | 'ideas' | 'prd' | 'build' | 'review' | 'history'
 
 function MainApp() {
   const { user } = useAuth()
@@ -153,6 +166,7 @@ function MainApp() {
   const [loading, setLoading] = useState(true)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error'>('idle')
   const [showSettings, setShowSettings] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [showFigmaImport, setShowFigmaImport] = useState(false)
   const [showTemplateGallery, setShowTemplateGallery] = useState(false)
   const [pendingProjectName, setPendingProjectName] = useState<string | null>(null)
@@ -166,6 +180,53 @@ function MainApp() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+
+  // Cloud sync - runs when user becomes available
+  useEffect(() => {
+    if (!user?.id) return
+    
+    // Small delay to ensure Supabase session is fully established
+    const timer = setTimeout(async () => {
+      setSyncStatus('syncing')
+      try {
+        // Sync projects
+        const localProjects = await window.jett.getProjects()
+        const migratedProjects = (localProjects || []).map((p: Project) => ({
+          ...p,
+          review: p.review || { status: 'pending', errors: [], improvements: [], simplifications: [] }
+        }))
+        
+        const syncedProjects = await syncAllProjects(user.id, migratedProjects)
+        setProjects(syncedProjects)
+        for (const project of syncedProjects) {
+          await window.jett.updateProject(project)
+        }
+        
+        // Sync ideas
+        const savedIdeas = localStorage.getItem('jett-ideas')
+        let localIdeas: Idea[] = []
+        if (savedIdeas) {
+          try {
+            localIdeas = JSON.parse(savedIdeas)
+          } catch (e) {
+            console.error('Failed to parse saved ideas:', e)
+          }
+        }
+        
+        const syncedIdeas = await syncAllIdeas(user.id, localIdeas)
+        setIdeas(syncedIdeas)
+        localStorage.setItem('jett-ideas', JSON.stringify(syncedIdeas))
+        
+        setSyncStatus('idle')
+        console.log('☁️ Cloud sync complete')
+      } catch (syncError) {
+        console.error('Cloud sync failed:', syncError)
+        setSyncStatus('error')
+      }
+    }, 1500)
+    
+    return () => clearTimeout(timer)
+  }, [user?.id])
 
   const loadInitialData = async () => {
     try {
@@ -193,48 +254,19 @@ function MainApp() {
       
       // Load local ideas
       const savedIdeas = localStorage.getItem('jett-ideas')
-      let localIdeas: Idea[] = []
       if (savedIdeas) {
         try {
-          localIdeas = JSON.parse(savedIdeas)
-          setIdeas(localIdeas)
+          setIdeas(JSON.parse(savedIdeas))
         } catch (e) {
           console.error('Failed to parse saved ideas:', e)
         }
       }
       
-      // If user is logged in, sync with cloud
-      if (user?.id) {
-        setSyncStatus('syncing')
-        try {
-          // Sync projects
-          const syncedProjects = await syncAllProjects(user.id, migratedProjects)
-          setProjects(syncedProjects)
-          // Update local storage with synced projects
-          for (const project of syncedProjects) {
-            await window.jett.updateProject(project)
-          }
-          
-          // Sync ideas
-          const syncedIdeas = await syncAllIdeas(user.id, localIdeas)
-          setIdeas(syncedIdeas)
-          localStorage.setItem('jett-ideas', JSON.stringify(syncedIdeas))
-          
-          setSyncStatus('idle')
-          console.log('☁️ Cloud sync complete')
-        } catch (syncError) {
-          console.error('Cloud sync failed:', syncError)
-          setSyncStatus('error')
-          // Continue with local data
-        }
-      }
-      
-      // Load last project if exists (but don't change view - always start on Projects)
+      // Load last project if exists
       if (settings.lastProjectId && migratedProjects.length > 0) {
         const lastProject = migratedProjects.find((p: Project) => p.id === settings.lastProjectId)
         if (lastProject) {
           setCurrentProject(lastProject)
-          // Always start on Projects view
         }
       }
     } catch (error) {
@@ -1009,41 +1041,67 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
                   Build
                 </button>
                 
-                {/* Review Tab - only show after build has steps */}
-                {((currentProject.modules?.length ?? 0) > 0 || (currentProject.buildSteps?.length ?? 0) > 0) && (
-                  <button
-                    onClick={() => setView('review')}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5"
-                    style={{ 
-                      background: view === 'review' ? 'var(--bg-tertiary)' : 'transparent',
-                      color: view === 'review' ? 'var(--text-primary)' : 'var(--text-tertiary)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (view !== 'review') {
-                        e.currentTarget.style.background = 'var(--bg-hover)'
-                        e.currentTarget.style.color = 'var(--text-primary)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (view !== 'review') {
-                        e.currentTarget.style.background = 'transparent'
-                        e.currentTarget.style.color = 'var(--text-tertiary)'
-                      }
-                    }}
-                  >
-                    <IconCode size={14} />
-                    Review
-                    {currentProject.review?.status === 'complete' && 
-                     (currentProject.review?.errors?.filter(e => e.status === 'open').length || 0) > 0 && (
-                      <span 
-                        className="ml-1 px-1.5 py-0.5 text-xs rounded-full"
-                        style={{ background: 'var(--error)', color: 'white' }}
-                      >
-                        {currentProject.review.errors.filter(e => e.status === 'open').length}
-                      </span>
-                    )}
-                  </button>
-                )}
+                {/* Review Tab */}
+                <button
+                  onClick={() => setView('review')}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5"
+                  style={{ 
+                    background: view === 'review' ? 'var(--bg-tertiary)' : 'transparent',
+                    color: view === 'review' ? 'var(--text-primary)' : 'var(--text-tertiary)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (view !== 'review') {
+                      e.currentTarget.style.background = 'var(--bg-hover)'
+                      e.currentTarget.style.color = 'var(--text-primary)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (view !== 'review') {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'var(--text-tertiary)'
+                    }
+                  }}
+                >
+                  <IconCode size={14} />
+                  Review
+                  {currentProject.review?.status === 'complete' && 
+                   (currentProject.review?.errors?.filter(e => e.status === 'open').length || 0) > 0 && (
+                    <span 
+                      className="ml-1 px-1.5 py-0.5 text-xs rounded-full"
+                      style={{ background: 'var(--error)', color: 'white' }}
+                    >
+                      {currentProject.review.errors.filter(e => e.status === 'open').length}
+                    </span>
+                  )}
+                </button>
+                
+                {/* History Tab */}
+                <button
+                  onClick={() => setView('history')}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5"
+                  style={{ 
+                    background: view === 'history' ? 'var(--bg-tertiary)' : 'transparent',
+                    color: view === 'history' ? 'var(--text-primary)' : 'var(--text-tertiary)'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (view !== 'history') {
+                      e.currentTarget.style.background = 'var(--bg-hover)'
+                      e.currentTarget.style.color = 'var(--text-primary)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (view !== 'history') {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = 'var(--text-tertiary)'
+                    }
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  History
+                </button>
                 
                 {/* Divider */}
                 <div className="h-6 w-px mx-1" style={{ background: 'var(--border-secondary)' }} />
@@ -1143,6 +1201,9 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
               </svg>
             </button>
             
+  {/* Help bubble */}
+<HelpBubble onClick={() => setShowHelp(true)} />
+
             {/* User Menu */}
             <UserMenu />
           </div>
@@ -1159,6 +1220,14 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
           model={model}
           onModelChange={handleModelChange}
         />
+
+<HelpPanel
+  isOpen={showHelp}
+  onClose={() => setShowHelp(false)}
+  apiKey={apiKey}
+  provider={provider}
+  model={model}
+/>
 
         {/* Figma Import Modal */}
         <FigmaImportModal
@@ -1187,10 +1256,8 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
               onSelectProject={(project) => { handleSelectProject(project) }}
               onDeleteProject={handleDeleteProject}
               onImportFigma={() => setShowFigmaImport(true)}
+              onOpenSettings={() => setShowSettings(true)}
               apiKey={apiKey}
-              provider={provider}
-              theme={theme}
-              onSettingsSave={handleSettingsSave}
             />
           )}
           
@@ -1307,6 +1374,15 @@ Make the minimal changes needed to fix this. Output the complete updated file(s)
               autoReview={autoReview}
               onAutoReviewToggle={setAutoReview}
               apiKey={apiKey}
+            />
+          )}
+          
+          {view === 'history' && currentProject && (
+            <HistoryView
+              projectPath={currentProject.id}
+              projectName={currentProject.name}
+              versions={currentProject.published_versions || []}
+              onVersionsChange={(versions) => handleProjectUpdate({ ...currentProject, published_versions: versions })}
             />
           )}
         </main>

@@ -493,6 +493,19 @@ CRITICAL: Respond with ONLY a valid JSON array. No markdown code blocks, no expl
     console.log(`Added ${selected.length} captures to idea`)
   }
 
+  // === Manual capture from entire chat ===
+  const handleCaptureFromChat = async () => {
+    if (!selectedIdea || !apiKey || selectedIdea.chat.length === 0) return
+    
+    // Combine all chat messages into one block
+    const chatContent = selectedIdea.chat
+      .map(msg => `${msg.role === 'user' ? 'User' : 'AI'}: ${msg.content}`)
+      .join('\n\n')
+    
+    console.log('Manual capture triggered, chat length:', chatContent.length)
+    await extractCapturesFromContent(chatContent, selectedIdea.id)
+  }
+  
   // Send chat message
   const handleSendMessage = async () => {
     if (!chatInput.trim() || !selectedIdea || !apiKey || isThinking) return
@@ -1186,9 +1199,24 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
             style={{ background: 'var(--bg-secondary)' }}
           >
               <div className="p-3 border-b" style={{ borderColor: 'var(--border-primary)' }}>
-                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  PRD Captures
-                </h3>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    PRD Captures
+                  </h3>
+                  <button
+                    onClick={handleCaptureFromChat}
+                    disabled={!apiKey || isExtracting || selectedIdea.chat.length === 0}
+                    className="px-2 py-1 rounded text-xs font-medium disabled:opacity-50 flex items-center gap-1"
+                    style={{ background: 'var(--accent-primary)', color: 'white' }}
+                    title="Scan chat for PRD content"
+                  >
+                    {isExtracting ? (
+                      <>Scanning...</>
+                    ) : (
+                      <><IconSparkles size={12} /> Capture</>
+                    )}
+                  </button>
+                </div>
                 <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   {getTotalCaptures(selectedIdea)} items captured
                 </p>

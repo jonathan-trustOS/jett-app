@@ -176,7 +176,7 @@ export default function ReviewView({
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-gray-400">{getCategoryIcon(item.category)}</span>
-          <span className="text-sm font-medium text-white truncate">{item.title}</span>
+          <span className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</span>
         </div>
         <span className={`text-xs px-1.5 py-0.5 rounded capitalize flex-shrink-0 ${
           item.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
@@ -194,7 +194,7 @@ export default function ReviewView({
       )}
       
       {/* Description - collapsed by default */}
-      <p className="text-xs text-gray-400 line-clamp-2 mb-2">{item.description}</p>
+      <p className="text-xs text-[var(--text-secondary)] line-clamp-2 mb-2">{item.description}</p>
       
       {/* Actions */}
       {showActions && item.status === 'open' && (
@@ -251,10 +251,10 @@ export default function ReviewView({
   ) => (
     <div className="flex-1 min-w-[240px] max-w-[320px] flex flex-col">
       {/* Column header */}
-      <div className={`flex items-center gap-2 mb-3 pb-2 border-b border-gray-700`}>
+      <div className={`flex items-center gap-2 mb-3 pb-2 border-b`} style={{ borderColor: 'var(--border-primary)' }}>
         <span className={`w-2 h-2 rounded-full ${color}`}></span>
-        <span className="text-sm font-medium text-white">{title}</span>
-        <span className="text-xs text-gray-500 bg-gray-800 px-1.5 py-0.5 rounded">
+        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{title}</span>
+        <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
           {items.length}
         </span>
       </div>
@@ -425,7 +425,7 @@ export default function ReviewView({
             className={`px-3 py-1.5 text-sm rounded-full whitespace-nowrap flex items-center gap-1.5 ${
               selectedCategory === key
                 ? 'bg-[var(--accent-primary)] text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                : 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
             {label}

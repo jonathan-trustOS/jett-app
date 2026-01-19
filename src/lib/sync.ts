@@ -57,11 +57,10 @@ export async function fetchProjects(userId: string): Promise<Project[]> {
       .order('updated_at', { ascending: false })
 
     if (error) {
-      console.error('Failed to fetch projects:', error)
+      console.error('Failed to fetch projects:', error.message)
       return []
     }
 
-    // Transform from DB schema to App schema
     return (data || []).map(dbProjectToApp)
   } catch (err) {
     console.error('Projects fetch error:', err)
@@ -81,7 +80,7 @@ export async function upsertProject(userId: string, project: Project): Promise<b
       })
 
     if (error) {
-      console.error('Failed to upsert project:', error)
+      console.error('Failed to upsert project:', error.message)
       return false
     }
 
@@ -100,7 +99,7 @@ export async function deleteProject(projectId: string): Promise<boolean> {
       .eq('id', projectId)
 
     if (error) {
-      console.error('Failed to delete project:', error)
+      console.error('Failed to delete project:', error.message)
       return false
     }
 
@@ -124,11 +123,10 @@ export async function fetchIdeas(userId: string): Promise<Idea[]> {
       .order('updated_at', { ascending: false })
 
     if (error) {
-      console.error('Failed to fetch ideas:', error)
+      console.error('Failed to fetch ideas:', error.message)
       return []
     }
 
-    // Transform from DB schema to App schema
     return (data || []).map(dbIdeaToApp)
   } catch (err) {
     console.error('Ideas fetch error:', err)
@@ -148,7 +146,7 @@ export async function upsertIdea(userId: string, idea: Idea): Promise<boolean> {
       })
 
     if (error) {
-      console.error('Failed to upsert idea:', error)
+      console.error('Failed to upsert idea:', error.message)
       return false
     }
 
@@ -167,7 +165,7 @@ export async function deleteIdea(ideaId: string): Promise<boolean> {
       .eq('id', ideaId)
 
     if (error) {
-      console.error('Failed to delete idea:', error)
+      console.error('Failed to delete idea:', error.message)
       return false
     }
 
@@ -222,8 +220,6 @@ function appProjectToDb(userId: string, app: Project): any {
     version_history: app.versionHistory,
     suggestions: app.suggestions,
     review: app.review,
-    // Let DB handle timestamps
-    // created_at and updated_at handled by triggers
   }
 }
 
@@ -260,7 +256,6 @@ function appIdeaToDb(userId: string, app: Idea): any {
     prd_captures: app.prdCaptures,
     status: app.status,
     promoted_to_project_id: app.projectId || null
-    // Let DB handle timestamps
   }
 }
 
@@ -271,6 +266,15 @@ function appIdeaToDb(userId: string, app: Idea): any {
 export async function syncAllProjects(userId: string, localProjects: Project[]): Promise<Project[]> {
   // Fetch from cloud
   const cloudProjects = await fetchProjects(userId)
+  
+  // If fetch failed (empty and we have local), use local
+  if (cloudProjects.length === 0 && localProjects.length > 0) {
+    console.log('📱 Using local projects, uploading to cloud...')
+    for (const project of localProjects) {
+      await upsertProject(userId, project)
+    }
+    return localProjects
+  }
   
   // Create a map of cloud projects by ID
   const cloudMap = new Map(cloudProjects.map(p => [p.id, p]))
@@ -283,20 +287,16 @@ export async function syncAllProjects(userId: string, localProjects: Project[]):
     const cloud = cloudMap.get(local.id)
     
     if (!cloud) {
-      // Local only - upload to cloud
       toUpload.push(local)
       merged.push(local)
     } else {
-      // Both exist - use most recent
       const localTime = new Date(local.updatedAt).getTime()
       const cloudTime = new Date(cloud.updatedAt).getTime()
       
       if (localTime >= cloudTime) {
-        // Local is newer - upload and use local
         toUpload.push(local)
         merged.push(local)
       } else {
-        // Cloud is newer - use cloud
         merged.push(cloud)
       }
       cloudMap.delete(local.id)
@@ -313,12 +313,22 @@ export async function syncAllProjects(userId: string, localProjects: Project[]):
     await upsertProject(userId, project)
   }
   
+  console.log(`☁️ Projects synced: ${merged.length} total, ${toUpload.length} uploaded`)
   return merged
 }
 
 export async function syncAllIdeas(userId: string, localIdeas: Idea[]): Promise<Idea[]> {
   // Fetch from cloud
   const cloudIdeas = await fetchIdeas(userId)
+  
+  // If fetch failed (empty and we have local), use local
+  if (cloudIdeas.length === 0 && localIdeas.length > 0) {
+    console.log('📱 Using local ideas, uploading to cloud...')
+    for (const idea of localIdeas) {
+      await upsertIdea(userId, idea)
+    }
+    return localIdeas
+  }
   
   // Create a map of cloud ideas by ID
   const cloudMap = new Map(cloudIdeas.map(i => [i.id, i]))
@@ -331,20 +341,16 @@ export async function syncAllIdeas(userId: string, localIdeas: Idea[]): Promise<
     const cloud = cloudMap.get(local.id)
     
     if (!cloud) {
-      // Local only - upload to cloud
       toUpload.push(local)
       merged.push(local)
     } else {
-      // Both exist - use most recent
       const localTime = new Date(local.updatedAt).getTime()
       const cloudTime = new Date(cloud.updatedAt).getTime()
       
       if (localTime >= cloudTime) {
-        // Local is newer - upload and use local
         toUpload.push(local)
         merged.push(local)
       } else {
-        // Cloud is newer - use cloud
         merged.push(cloud)
       }
       cloudMap.delete(local.id)
@@ -361,5 +367,6 @@ export async function syncAllIdeas(userId: string, localIdeas: Idea[]): Promise<
     await upsertIdea(userId, idea)
   }
   
+  console.log(`☁️ Ideas synced: ${merged.length} total, ${toUpload.length} uploaded`)
   return merged
 }

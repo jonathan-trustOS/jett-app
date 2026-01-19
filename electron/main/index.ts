@@ -28,6 +28,7 @@ import {
   getSnapshotDetails,
   createInitialSnapshot
 } from '../history/index'
+import { registerHistoryHandlers } from '../history-ipc-handlers'
 
 // Validation system imports
 import {
@@ -135,7 +136,10 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  createWindow()
+  registerHistoryHandlers()
+})
 app.on('window-all-closed', () => {
   stopDevServer()
   if (process.platform !== 'darwin') app.quit()
@@ -178,6 +182,43 @@ ipcMain.handle('storage:save-settings', async (_event, settings: any) => {
   if (settings.model !== undefined) s.set('model', settings.model)
   if (settings.theme !== undefined) s.set('theme', settings.theme)
   if (settings.lastProjectId !== undefined) s.set('lastProjectId', settings.lastProjectId)
+  return true
+})
+
+// =============================================================================
+// AUTH SESSION STORAGE (for Supabase persistence)
+// =============================================================================
+
+ipcMain.handle('auth:get-session', async () => {
+  const s = await getStore()
+  return s.get('supabase_session', null)
+})
+
+ipcMain.handle('auth:set-session', async (_event, session: any) => {
+  const s = await getStore()
+  if (session) {
+    s.set('supabase_session', session)
+  } else {
+    s.delete('supabase_session')
+  }
+  return true
+})
+
+ipcMain.handle('auth:remove-session', async () => {
+  const s = await getStore()
+  s.delete('supabase_session')
+  return true
+})
+
+// Remember email for login
+ipcMain.handle('auth:get-remembered-email', async () => {
+  const s = await getStore()
+  return s.get('remembered_email', '')
+})
+
+ipcMain.handle('auth:set-remembered-email', async (_event, email: string) => {
+  const s = await getStore()
+  s.set('remembered_email', email)
   return true
 })
 

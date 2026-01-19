@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
-import { supabase, UserProfile } from '../lib/supabase'
+import { supabase, UserProfile, STORAGE_KEY } from '../lib/supabase'
 
 interface AuthState {
   user: User | null
@@ -22,6 +22,52 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+// Mirror session to electron-store (for persistence across app restarts)
+async function mirrorToElectronStore(session: Session | null) {
+  if (!window.jett?.auth?.setSession) return
+  
+  try {
+    if (session) {
+      // Store the full session object (same format Supabase uses)
+      await window.jett.auth.setSession(STORAGE_KEY, JSON.stringify(session))
+      console.log('✓ Session mirrored to electron-store')
+    } else {
+      await window.jett.auth.removeSession(STORAGE_KEY)
+      console.log('✓ Session removed from electron-store')
+    }
+  } catch (err) {
+    console.warn('Failed to mirror session to electron-store:', err)
+  }
+}
+
+// Restore session from electron-store to localStorage (called once on init)
+async function restoreFromElectronStore(): Promise<boolean> {
+  if (!window.jett?.auth?.getSession) return false
+  
+  try {
+    // Check if localStorage already has a session
+    const existingSession = localStorage.getItem(STORAGE_KEY)
+    if (existingSession) {
+      console.log('Session already in localStorage')
+      return true
+    }
+    
+    // Try to restore from electron-store
+    const stored = await window.jett.auth.getSession(STORAGE_KEY)
+    if (stored) {
+      // Copy to localStorage so Supabase can find it
+      localStorage.setItem(STORAGE_KEY, stored)
+      console.log('✓ Session restored from electron-store to localStorage')
+      return true
+    }
+    
+    return false
+  } catch (err) {
+    console.warn('Failed to restore from electron-store:', err)
+    return false
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: null,
@@ -36,20 +82,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('Fetching profile for:', email || userId)
       
-      // Try by email first (more reliable for our setup)
+      // Try by email first
       if (email) {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
           .eq('email', email)
-          .single()
+          .maybeSingle()
 
         if (!error && data) {
           console.log('Profile found:', data.subscription_status)
           setState(prev => ({ ...prev, profile: data as UserProfile }))
           return
         }
-        console.log('Profile fetch by email failed:', error?.message)
+        if (error) {
+          console.log('Profile fetch by email error:', error.message)
+        } else {
+          console.log('No profile found for email')
+        }
       }
 
       // Fallback to ID
@@ -57,16 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       if (!error && data) {
         console.log('Profile found by ID:', data.subscription_status)
         setState(prev => ({ ...prev, profile: data as UserProfile }))
+      } else if (error) {
+        console.log('Profile fetch by ID error:', error.message)
       } else {
-        console.log('Profile fetch by ID failed:', error?.message)
+        console.log('No profile found for ID - continuing without profile')
       }
     } catch (err) {
-      console.error('Profile fetch error:', err)
+      console.error('Profile fetch exception:', err)
     }
   }
 
@@ -76,6 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initAuth = async () => {
       try {
+        // STEP 1: Restore session from electron-store to localStorage
+        await restoreFromElectronStore()
+        
+        // STEP 2: Now Supabase can find it in localStorage
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (!mounted) return
@@ -93,16 +149,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         if (session?.user) {
-          console.log('Session found for:', session.user.email)
-          // Set user immediately - don't wait for profile
+          console.log('✓ Session found for:', session.user.email)
           setState({
             user: session.user,
-            profile: null, // Will be filled in by background fetch
+            profile: null,
             session,
             loading: false,
             initialized: true
           })
-          // Fetch profile in background
           fetchProfileInBackground(session.user.id, session.user.email || undefined)
         } else {
           console.log('No session found')
@@ -137,25 +191,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (!mounted) return
 
-        if (session?.user) {
-          // Set user immediately
-          setState(prev => ({
-            ...prev,
-            user: session.user,
-            session,
-            loading: false,
-            initialized: true
-          }))
-          // Fetch profile in background
-          fetchProfileInBackground(session.user.id, session.user.email || undefined)
-        } else {
-          setState({
-            user: null,
-            profile: null,
-            session: null,
-            loading: false,
-            initialized: true
-          })
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Mirror to electron-store for persistence
+          await mirrorToElectronStore(session)
+          
+          if (session?.user) {
+            setState(prev => ({
+              ...prev,
+              user: session.user,
+              session,
+              loading: false,
+              initialized: true
+            }))
+            fetchProfileInBackground(session.user.id, session.user.email || undefined)
+          }
+        } else if (event === 'SIGNED_OUT') {
+          // Only trust explicit sign outs
+          console.log('Ignoring SIGNED_OUT event from listener')
         }
       }
     )
@@ -170,13 +222,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true }))
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`
       }
     })
+
+    // Mirror session to electron-store
+    if (data.session) {
+      await mirrorToElectronStore(data.session)
+    }
+
+    // Record ToS acceptance timestamp
+    if (!error && data.user) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({ tos_accepted_at: new Date().toISOString() })
+          .eq('id', data.user.id)
+        console.log('✓ ToS acceptance recorded')
+      } catch (tosError) {
+        console.warn('Failed to record ToS acceptance:', tosError)
+        // Don't fail signup if ToS update fails
+      }
+    }
 
     setState(prev => ({ ...prev, loading: false }))
     return { error }
@@ -185,10 +256,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     setState(prev => ({ ...prev, loading: true }))
     
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     })
+
+    // Mirror session to electron-store
+    if (data.session) {
+      await mirrorToElectronStore(data.session)
+    }
 
     setState(prev => ({ ...prev, loading: false }))
     return { error }
@@ -196,6 +272,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     setState(prev => ({ ...prev, loading: true }))
+    
+    // Clear from electron-store
+    await mirrorToElectronStore(null)
+    
     await supabase.auth.signOut()
     setState({
       user: null,
@@ -262,7 +342,6 @@ export function useAuth() {
 export function useSubscription() {
   const { profile } = useAuth()
   
-  // If profile hasn't loaded yet, assume active (don't block the user)
   const status = profile?.subscription_status || 'active'
   
   const isActive = status === 'active'
@@ -270,7 +349,7 @@ export function useSubscription() {
   const isPastDue = status === 'past_due'
   const isCancelled = status === 'cancelled'
   
-  const canUseApp = isActive || isTrialing || isPastDue || !profile // Allow if profile not loaded
+  const canUseApp = isActive || isTrialing || isPastDue || !profile
   
   const trialDaysLeft = profile?.trial_ends_at 
     ? Math.max(0, Math.ceil((new Date(profile.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))

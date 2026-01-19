@@ -1,5 +1,95 @@
 import { useState, useEffect, useCallback } from 'react'
 
+// Inline SVG icons for PRD sections
+const IconClipboard = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+  </svg>
+)
+
+const IconUser = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+    <circle cx="12" cy="7" r="4"/>
+  </svg>
+)
+
+const IconSparkles = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/>
+    <path d="M5 19l1 3 1-3 3-1-3-1-1-3-1 3-3 1 3 1z"/>
+  </svg>
+)
+
+const IconMonitor = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+    <line x1="8" y1="21" x2="16" y2="21"/>
+    <line x1="12" y1="17" x2="12" y2="21"/>
+  </svg>
+)
+
+const IconDatabase = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+  </svg>
+)
+
+const IconCog = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+)
+
+const IconSearch = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+  </svg>
+)
+
+const IconPalette = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="13.5" cy="6.5" r="0.5" fill="currentColor"/>
+    <circle cx="17.5" cy="10.5" r="0.5" fill="currentColor"/>
+    <circle cx="8.5" cy="7.5" r="0.5" fill="currentColor"/>
+    <circle cx="6.5" cy="12.5" r="0.5" fill="currentColor"/>
+    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/>
+  </svg>
+)
+
+const IconRocket = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+    <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+  </svg>
+)
+
+const IconDocument = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="16" y1="13" x2="8" y2="13"/>
+    <line x1="16" y1="17" x2="8" y2="17"/>
+    <polyline points="10 9 9 9 8 9"/>
+  </svg>
+)
+
+const IconDownload = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="7 10 12 15 17 10"/>
+    <line x1="12" y1="15" x2="12" y2="3"/>
+  </svg>
+)
+
+
 interface Idea {
   id: string
   title: string
@@ -316,17 +406,16 @@ CRITICAL INSTRUCTIONS:
   }
 
   // Section components
-  const SectionHeader = ({ id, title, emoji, isComplete }: { id: string; title: string; emoji: string; isComplete: boolean }) => (
-    <button
+  const SectionHeader = ({ id, title, icon, isComplete }: { id: string; title: string; icon: React.ReactNode; isComplete: boolean }) => (    <button
       onClick={() => setExpandedSection(expandedSection === id ? '' : id)}
       className={`w-full flex items-center justify-between p-4 rounded-lg transition-colors ${
         expandedSection === id ? 'bg-[var(--bg-tertiary)]' : 'bg-[var(--bg-secondary)] hover:bg-slate-750'
       }`}
     >
       <div className="flex items-center gap-3">
-        <span className="text-xl">{emoji}</span>
+      <span className="text-[var(--text-secondary)]">{icon}</span>
         <span className="font-medium text-[var(--text-primary)]">{title}</span>
-        {isComplete && <span className="text-emerald-400">✓</span>}
+        {isComplete && <span className="text-emerald-600">✓</span>}
       </div>
       <span className="text-[var(--text-secondary)]">{expandedSection === id ? '▼' : '▶'}</span>
     </button>
@@ -659,22 +748,23 @@ If your app stores data, list what you're storing:
             }}
             className="px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center gap-2"
           >
-            📄 Download Template
+            <IconDocument size={14} /> Download Template
           </button>
           <button
             onClick={() => setShowImportModal(true)}
             className="px-3 py-1.5 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-tertiary)] rounded-lg transition-colors flex items-center gap-2"
           >
-            📥 Import PRD
+            <IconDownload size={14} /> Import PRD
           </button>
         </div>
         <div className="max-w-3xl mx-auto space-y-4">
           {/* Overview Section */}
           <div>
-            <SectionHeader 
-              id="overview" 
-              title="Overview" 
-              emoji="📋" 
+          <SectionHeader 
+  id="overview" 
+  title="Overview" 
+  icon={<IconClipboard size={18} />}
+
               isComplete={!!(prd.overview.name && prd.overview.description && prd.overview.coreGoal)}
             />
             {expandedSection === 'overview' && (
@@ -743,7 +833,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="targetUsers" 
               title="Target Users" 
-              emoji="👤" 
+              icon={<IconUser size={18} />} 
               isComplete={!!(prd.targetUsers.primaryUser)}
             />
             {expandedSection === 'targetUsers' && (
@@ -776,7 +866,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="features" 
               title="Features" 
-              emoji="✨" 
+              icon={<IconSparkles size={18} />} 
               isComplete={prd.features.length >= 1 && prd.features.some(f => f.title)}
             />
             {expandedSection === 'features' && (
@@ -842,7 +932,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="screens" 
               title="Screens" 
-              emoji="📱" 
+              icon={<IconMonitor size={18} />} 
               isComplete={prd.screens.length >= 1 && prd.screens.some(s => s.name)}
             />
             {expandedSection === 'screens' && (
@@ -888,7 +978,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="dataModel" 
               title="Data Model" 
-              emoji="🗄️" 
+              icon={<IconDatabase size={18} />} 
               isComplete={!prd.dataModel.needsDatabase || prd.dataModel.entities.length >= 1}
             />
             {expandedSection === 'dataModel' && (
@@ -973,7 +1063,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="techStack" 
               title="Tech Stack" 
-              emoji="⚙️" 
+              icon={<IconCog size={18} />} 
               isComplete={true}
             />
             {expandedSection === 'techStack' && (
@@ -1021,7 +1111,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="competitors" 
               title="Competitors & Inspiration" 
-              emoji="🔍" 
+              icon={<IconSearch size={18} />} 
               isComplete={!!prd.competitors}
             />
             {expandedSection === 'competitors' && (
@@ -1041,7 +1131,7 @@ If your app stores data, list what you're storing:
             <SectionHeader 
               id="designNotes" 
               title="Design Notes" 
-              emoji="🎨" 
+              icon={<IconPalette size={18} />} 
               isComplete={!!prd.designNotes}
             />
             {expandedSection === 'designNotes' && (
@@ -1065,7 +1155,10 @@ If your app stores data, list what you're storing:
         {/* Score display */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-3xl">{getConfidenceEmoji()}</span>
+          <div className={`w-8 h-8 rounded-full ${
+  confidence.level === 'green' ? 'bg-emerald-500' :
+  confidence.level === 'yellow' ? 'bg-amber-500' : 'bg-red-500'
+}`} />
             <span className="text-2xl font-bold text-[var(--text-primary)]">{confidence.percent}%</span>
           </div>
           <div className="h-3 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
@@ -1083,16 +1176,16 @@ If your app stores data, list what you're storing:
 
         {/* Checklist */}
         <div className="flex-1 space-y-2 text-sm">
-          <div className={`flex items-center gap-2 ${prd.overview.name && prd.overview.description && prd.overview.coreGoal ? 'text-emerald-400' : 'text-[var(--text-secondary)]'}`}>
+          <div className={`flex items-center gap-2 ${prd.overview.name && prd.overview.description && prd.overview.coreGoal ? 'text-emerald-600' : 'text-[var(--text-secondary)]'}`}>
             {prd.overview.name && prd.overview.description && prd.overview.coreGoal ? '✓' : '○'} Overview complete
           </div>
-          <div className={`flex items-center gap-2 ${prd.features.length >= 1 ? 'text-emerald-400' : 'text-[var(--text-secondary)]'}`}>
+          <div className={`flex items-center gap-2 ${prd.features.length >= 1 ? 'text-emerald-600' : 'text-[var(--text-secondary)]'}`}>
             {prd.features.length >= 1 ? '✓' : '○'} At least 1 feature
           </div>
-          <div className={`flex items-center gap-2 ${prd.targetUsers.primaryUser ? 'text-emerald-400' : 'text-[var(--text-secondary)]'}`}>
+          <div className={`flex items-center gap-2 ${prd.targetUsers.primaryUser ? 'text-emerald-600' : 'text-[var(--text-secondary)]'}`}>
             {prd.targetUsers.primaryUser ? '✓' : '○'} Target users defined
           </div>
-          <div className={`flex items-center gap-2 ${prd.designNotes ? 'text-emerald-400' : 'text-[var(--text-secondary)]'}`}>
+          <div className={`flex items-center gap-2 ${prd.designNotes ? 'text-emerald-600' : 'text-[var(--text-secondary)]'}`}>
             {prd.designNotes ? '✓' : '○'} Design notes added
           </div>
           <div className={`flex items-center gap-2 text-[var(--text-tertiary)]`}>
@@ -1105,12 +1198,12 @@ If your app stores data, list what you're storing:
           onClick={onGenerateTasks}
           disabled={confidence.level === 'red'}
           className={`w-full py-3 rounded-lg font-medium transition-colors ${
-            confidence.level === 'red'
-              ? 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] cursor-not-allowed'
-              : 'bg-indigo-600 hover:bg-indigo-500 text-[var(--text-primary)]'
-          }`}
+  confidence.level === 'red'
+    ? 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] cursor-not-allowed'
+    : 'bg-sky-500 hover:bg-sky-400 text-white'
+}`}
         >
-          🚀 Generate Tasks
+          <span className="flex items-center justify-center gap-2"><IconRocket size={16} /> Generate Tasks</span>
         </button>
         
         {confidence.level === 'red' && (

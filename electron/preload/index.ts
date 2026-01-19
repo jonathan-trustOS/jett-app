@@ -16,6 +16,15 @@ contextBridge.exposeInMainWorld('jett', {
   updateProjectStatus: (projectId: string, status: string) => ipcRenderer.invoke('storage:update-project-status', projectId, status),
   setDeployUrl: (projectId: string, url: string) => ipcRenderer.invoke('storage:set-deploy-url', projectId, url),
   
+  // Auth session storage (for Supabase persistence)
+  auth: {
+    getSession: () => ipcRenderer.invoke('auth:get-session'),
+    setSession: (session: any) => ipcRenderer.invoke('auth:set-session', session),
+    removeSession: () => ipcRenderer.invoke('auth:remove-session'),
+    getRememberedEmail: () => ipcRenderer.invoke('auth:get-remembered-email'),
+    setRememberedEmail: (email: string) => ipcRenderer.invoke('auth:set-remembered-email', email)
+  },
+  
   // File system
   writeFile: (projectId: string, filePath: string, content: string) => 
     ipcRenderer.invoke('fs:write-file', projectId, filePath, content),
@@ -106,7 +115,15 @@ contextBridge.exposeInMainWorld('jett', {
     
     // Get snapshot details
     getDetails: (projectId: string, snapshotId: string) =>
-      ipcRenderer.invoke('history:get-details', projectId, snapshotId)
+      ipcRenderer.invoke('history:get-details', projectId, snapshotId),
+    
+    // Capture all files for publishing (History tab)
+    captureFiles: (projectPath: string) =>
+      ipcRenderer.invoke('history:capture-files', projectPath),
+    
+    // Write files for restore (History tab)
+    writeFiles: (projectPath: string, files: Record<string, string>) =>
+      ipcRenderer.invoke('history:write-files', projectPath, files)
   },
 
   // Validation System

@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import jettLogo from '../assets/jett-logo.png'
 
-type Theme = 'light' | 'dark'
-
 interface Project {
   id: string
   name: string
@@ -21,9 +19,6 @@ interface Props {
   onDeleteProject: (projectId: string) => void
   onImportFigma: () => void
   apiKey: string
-  provider: string
-  theme: Theme
-  onSettingsSave: (apiKey: string, provider: string, theme?: Theme) => void
 }
 
 export default function ProjectList({
@@ -33,16 +28,10 @@ export default function ProjectList({
   onDeleteProject,
   onImportFigma,
   apiKey,
-  provider,
-  theme,
-  onSettingsSave
+  onOpenSettings
 }: Props) {
   const [showNewProject, setShowNewProject] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
-  const [editApiKey, setEditApiKey] = useState(apiKey)
-  const [editProvider, setEditProvider] = useState(provider)
-  const [editTheme, setEditTheme] = useState<Theme>(theme)
   
   // Search and pagination
   const [searchQuery, setSearchQuery] = useState('')
@@ -70,17 +59,14 @@ export default function ProjectList({
       case 'alpha-desc':
         return b.name.localeCompare(a.name)
       case 'draft':
-        // Draft first, then by date
         if (a.status === 'draft' && b.status !== 'draft') return -1
         if (b.status === 'draft' && a.status !== 'draft') return 1
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       case 'building':
-        // Building first, then by date
         if (a.status === 'building' && b.status !== 'building') return -1
         if (b.status === 'building' && a.status !== 'building') return 1
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       case 'complete':
-        // Complete first, then by date
         if (a.status === 'complete' && b.status !== 'complete') return -1
         if (b.status === 'complete' && a.status !== 'complete') return 1
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -106,11 +92,6 @@ export default function ProjectList({
       setNewProjectName('')
       setShowNewProject(false)
     }
-  }
-
-  const handleSettingsSave = () => {
-    onSettingsSave(editApiKey, editProvider, editTheme)
-    setShowSettings(false)
   }
 
   const formatDate = (dateStr: string) => {
@@ -216,34 +197,6 @@ export default function ProjectList({
           
           <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                setEditApiKey(apiKey)
-                setEditProvider(provider)
-                setEditTheme(theme)
-                setShowSettings(true)
-              }}
-              className="p-2.5 rounded-lg transition-all duration-150"
-              style={{ 
-                background: 'var(--bg-secondary)', 
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-primary)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-secondary)'
-                e.currentTarget.style.color = 'var(--text-primary)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-primary)'
-                e.currentTarget.style.color = 'var(--text-secondary)'
-              }}
-              title="Settings"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-              </svg>
-            </button>
-            <button
               onClick={onImportFigma}
               className="px-4 py-2.5 font-medium rounded-lg transition-all duration-150 flex items-center gap-2"
               style={{ 
@@ -290,19 +243,19 @@ export default function ProjectList({
 
         {/* API Key Warning */}
         {!apiKey && (
-          <div 
-            className="mb-6 p-4 rounded-xl flex items-center gap-3"
-            style={{ background: 'var(--warning-light)', border: '1px solid var(--warning)' }}
+          <button 
+            onClick={onOpenSettings}
+            className="mb-6 p-4 rounded-xl flex items-center gap-3 w-full text-left transition-all duration-150 hover:scale-[1.01]"
+            style={{ background: 'var(--accent-primary)', border: 'none', cursor: 'pointer' }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
-            <p style={{ color: 'var(--text-primary)' }}>
-              No API key configured. Click Settings to add your API key.
+            <p style={{ color: 'white', fontWeight: 500 }}>
+              To enable Jett, click here to add your API key.
             </p>
-          </div>
+          </button>
         )}
 
         {/* Projects Grid */}
@@ -429,116 +382,92 @@ export default function ProjectList({
                   onClick={() => onSelectProject(project)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = 'var(--border-secondary)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-md)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-primary)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
-                }}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-semibold text-lg truncate flex-1 mr-2" style={{ color: 'var(--text-primary)' }}>
-                    {project.name}
-                  </h3>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {getStatusBadge(project.status)}
-                    <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        if (confirm(`Delete "${project.name}"?`)) {
-                          onDeleteProject(project.id)
-                        }
-                      }}
-                      className="px-2 py-0.5 text-xs rounded-full font-medium opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'var(--error-light)'
-                        e.currentTarget.style.color = 'var(--error)'
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'var(--bg-tertiary)'
-                        e.currentTarget.style.color = 'var(--text-secondary)'
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-                
-                <p 
-                  className="text-sm mb-4 line-clamp-2"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  {project.prd?.overview?.description || 'No description'}
-                </p>
-                
-                <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-secondary)' }}>
-                  <span>{formatDate(project.updatedAt)}</span>
-                  {project.deployUrl && (
-                    <a
-                      href={project.deployUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: 'var(--success)' }}
-                      onClick={e => e.stopPropagation()}
-                    >
-                      View Live →
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-8">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ 
-                  background: 'var(--bg-secondary)', 
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-primary)'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className="w-10 h-10 rounded-lg font-medium transition-all"
-                  style={{ 
-                    background: page === currentPage ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                    color: page === currentPage ? 'white' : 'var(--text-secondary)',
-                    border: page === currentPage ? 'none' : '1px solid var(--border-primary)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-md)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-primary)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-sm)'
                   }}
                 >
-                  {page}
-                </button>
+                  <div className="flex items-start justify-between mb-3">
+                    <h3 className="font-semibold text-lg truncate flex-1 mr-2" style={{ color: 'var(--text-primary)' }}>
+                      {project.name}
+                    </h3>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {getStatusBadge(project.status)}
+                      <button
+                        onClick={e => {
+                          e.stopPropagation()
+                          if (confirm(`Delete "${project.name}"?`)) {
+                            onDeleteProject(project.id)
+                          }
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded transition-all"
+                        style={{ color: 'var(--text-tertiary)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--error)'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-tertiary)'}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6"/>
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <p 
+                    className="text-sm mb-4 line-clamp-2 min-h-[40px]" 
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    {project.prd?.overview?.description || 'No description'}
+                  </p>
+                  
+                  <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    <span>{formatDate(project.createdAt)}</span>
+                    <span>{project.tasks?.length || 0} tasks</span>
+                  </div>
+                </div>
               ))}
-              
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-2 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ 
-                  background: 'var(--bg-secondary)', 
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border-primary)'
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6"/>
-                </svg>
-              </button>
             </div>
-          )}
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-8">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 transition-all"
+                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+                >
+                  Previous
+                </button>
+                
+                <div className="flex gap-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className="w-8 h-8 rounded-lg text-sm transition-all"
+                      style={{ 
+                        background: currentPage === page ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                        color: currentPage === page ? 'white' : 'var(--text-secondary)'
+                      }}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg text-sm disabled:opacity-50 transition-all"
+                  style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -618,157 +547,6 @@ export default function ProjectList({
                 onMouseLeave={(e) => e.currentTarget.style.background = 'var(--accent-primary)'}
               >
                 Create Project
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div 
-            className="rounded-2xl p-6 w-full max-w-md"
-            style={{ 
-              background: 'var(--bg-elevated)', 
-              border: '1px solid var(--border-primary)',
-              boxShadow: 'var(--shadow-lg)'
-            }}
-          >
-            <h2 className="text-lg font-semibold mb-6" style={{ color: 'var(--text-primary)' }}>
-              Settings
-            </h2>
-            
-            {/* Theme Toggle */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>
-                Appearance
-              </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEditTheme('light')}
-                  className="flex-1 py-3 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-150"
-                  style={{ 
-                    background: editTheme === 'light' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                    color: editTheme === 'light' ? 'white' : 'var(--text-secondary)',
-                    border: '1px solid ' + (editTheme === 'light' ? 'var(--accent-primary)' : 'var(--border-primary)')
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="5"/>
-                    <line x1="12" y1="1" x2="12" y2="3"/>
-                    <line x1="12" y1="21" x2="12" y2="23"/>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                    <line x1="1" y1="12" x2="3" y2="12"/>
-                    <line x1="21" y1="12" x2="23" y2="12"/>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                  </svg>
-                  Light
-                </button>
-                <button
-                  onClick={() => setEditTheme('dark')}
-                  className="flex-1 py-3 px-4 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-all duration-150"
-                  style={{ 
-                    background: editTheme === 'dark' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                    color: editTheme === 'dark' ? 'white' : 'var(--text-secondary)',
-                    border: '1px solid ' + (editTheme === 'dark' ? 'var(--accent-primary)' : 'var(--border-primary)')
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                  </svg>
-                  Dark
-                </button>
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="my-6" style={{ height: '1px', background: 'var(--border-primary)' }} />
-            
-            {/* Provider */}
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-                AI Provider
-              </label>
-              <select
-                value={editProvider}
-                onChange={e => setEditProvider(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none appearance-none"
-                style={{ 
-                  background: 'var(--bg-primary)', 
-                  border: '1px solid var(--border-primary)',
-                  color: 'var(--text-primary)',
-                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                  backgroundPosition: 'right 10px center',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundSize: '16px',
-                  paddingRight: '36px'
-                }}
-              >
-                <option value="claude">Claude (Anthropic)</option>
-                <option value="openrouter">OpenRouter</option>
-              </select>
-            </div>
-            
-            {/* API Key */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>
-                API Key
-              </label>
-              <input
-                type="password"
-                value={editApiKey}
-                onChange={e => setEditApiKey(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none transition-all duration-150"
-                style={{ 
-                  background: 'var(--bg-primary)', 
-                  border: '1px solid var(--border-primary)',
-                  color: 'var(--text-primary)'
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-focus)'
-                  e.currentTarget.style.boxShadow = '0 0 0 3px var(--accent-primary-light)'
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--border-primary)'
-                  e.currentTarget.style.boxShadow = 'none'
-                }}
-                placeholder={editProvider === 'claude' ? 'sk-ant-...' : 'sk-or-...'}
-              />
-              <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
-                {editProvider === 'claude' 
-                  ? 'Get your API key from console.anthropic.com'
-                  : 'Get your API key from openrouter.ai'
-                }
-              </p>
-            </div>
-            
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-2 rounded-lg transition-all duration-150"
-                style={{ color: 'var(--text-secondary)' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'var(--bg-hover)'
-                  e.currentTarget.style.color = 'var(--text-primary)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = 'var(--text-secondary)'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSettingsSave}
-                className="px-4 py-2 font-medium rounded-lg transition-all duration-150"
-                style={{ background: 'var(--accent-primary)', color: 'white' }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--accent-primary-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'var(--accent-primary)'}
-              >
-                Save Changes
               </button>
             </div>
           </div>
