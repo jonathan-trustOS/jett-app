@@ -5,6 +5,10 @@
 
 import { useState, useEffect } from 'react'
 
+// App version - should match package.json
+const APP_VERSION = '1.0.0'
+const GITHUB_REPO = 'jonathan-trustOS/jett-app'
+
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
@@ -33,6 +37,13 @@ interface MemoryPrefs {
   spacing: string
   animations: string
   autoSimplify: boolean
+}
+
+interface UpdateInfo {
+  available: boolean
+  latestVersion: string
+  downloadUrl: string
+  releaseNotes?: string
 }
 
 // Available models per provider
@@ -65,6 +76,12 @@ export default function SettingsPanel({
   const [tempApiKey, setTempApiKey] = useState(apiKey)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved'>('idle')
   const [showToast, setShowToast] = useState(false)
+  const [toastMessage, setToastMessage] = useState('API key saved successfully')
+  
+  // Vercel token state
+  const [vercelToken, setVercelToken] = useState('')
+  const [showVercelToken, setShowVercelToken] = useState(false)
+  const [vercelSaveStatus, setVercelSaveStatus] = useState<'idle' | 'saved'>('idle')
   
   // GitHub state
   const [githubAuth, setGithubAuth] = useState<GitHubAuth | null>(null)
@@ -75,6 +92,10 @@ export default function SettingsPanel({
   // Memory state
   const [memoryPrefs, setMemoryPrefs] = useState<MemoryPrefs | null>(null)
   const [memoryStats, setMemoryStats] = useState<any>(null)
+  
+  // Update check state
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   
   // Plugin toggles (stored in localStorage for now)
   const [pluginToggles, setPluginToggles] = useState({
@@ -127,6 +148,69 @@ export default function SettingsPanel({
         setPluginToggles(JSON.parse(saved))
       } catch (e) {}
     }
+    
+    // Load Vercel token
+    const savedVercelToken = localStorage.getItem('vercel_token')
+    if (savedVercelToken) {
+      setVercelToken(savedVercelToken)
+    }
+    
+    // Load last update check info
+    const savedUpdateInfo = localStorage.getItem('jett-update-info')
+    if (savedUpdateInfo) {
+      try {
+        setUpdateInfo(JSON.parse(savedUpdateInfo))
+      } catch (e) {}
+    }
+    
+    // Auto-check for updates on load
+    checkForUpdates()
+  }
+
+  // Check for updates via GitHub releases API
+  const checkForUpdates = async () => {
+    setIsCheckingUpdate(true)
+    try {
+      const response = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`)
+      if (response.ok) {
+        const release = await response.json()
+        const latestVersion = release.tag_name.replace(/^v/, '') // Remove 'v' prefix if present
+        
+        // Find DMG download URL
+        const dmgAsset = release.assets?.find((a: any) => a.name.endsWith('.dmg'))
+        const downloadUrl = dmgAsset?.browser_download_url || release.html_url
+        
+        const info: UpdateInfo = {
+          available: isNewerVersion(latestVersion, APP_VERSION),
+          latestVersion,
+          downloadUrl,
+          releaseNotes: release.body
+        }
+        
+        setUpdateInfo(info)
+        localStorage.setItem('jett-update-info', JSON.stringify(info))
+      } else {
+        console.error('Failed to check for updates:', response.status)
+      }
+    } catch (error) {
+      console.error('Update check failed:', error)
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
+  
+  // Compare version strings (e.g., "1.7.9" > "1.7.8")
+  const isNewerVersion = (latest: string, current: string): boolean => {
+    const latestParts = latest.split('.').map(Number)
+    const currentParts = current.split('.').map(Number)
+    
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+      const l = latestParts[i] || 0
+      const c = currentParts[i] || 0
+      if (l > c) return true
+      if (l < c) return false
+    }
+    return false
   }
 
   const saveApiKey = () => {
@@ -135,11 +219,31 @@ export default function SettingsPanel({
     
     // Show confirmation
     setSaveStatus('saved')
+    setToastMessage('API key saved successfully')
     setShowToast(true)
     
     // Reset after 2 seconds
     setTimeout(() => {
       setSaveStatus('idle')
+    }, 2000)
+    
+    // Hide toast after 3 seconds
+    setTimeout(() => {
+      setShowToast(false)
+    }, 3000)
+  }
+
+  const saveVercelToken = () => {
+    localStorage.setItem('vercel_token', vercelToken)
+    
+    // Show confirmation
+    setVercelSaveStatus('saved')
+    setToastMessage('Vercel token saved successfully')
+    setShowToast(true)
+    
+    // Reset after 2 seconds
+    setTimeout(() => {
+      setVercelSaveStatus('idle')
     }, 2000)
     
     // Hide toast after 3 seconds
@@ -173,98 +277,100 @@ export default function SettingsPanel({
       }
     } catch (e) {
       console.error('GitHub auth failed', e)
+    } finally {
+      setIsAuthenticating(false)
     }
-    setIsAuthenticating(false)
   }
 
   const handleGitHubLogout = async () => {
-    await window.jett.github.logout()
-    setGithubAuth(null)
+    try {
+      await window.jett.github.logout()
+      setGithubAuth(null)
+    } catch (e) {
+      console.error('GitHub logout failed', e)
+    }
   }
 
   const handleGitHubConfigChange = async (key: string, value: any) => {
+    if (!githubConfig) return
     const newConfig = { ...githubConfig, [key]: value }
-    setGithubConfig(newConfig as GitConfig)
-    await window.jett.github.updateConfig({ [key]: value })
-    
-    if (key === 'autoCommit') {
-      setPluginToggles(prev => ({ ...prev, autoCommit: value }))
+    setGithubConfig(newConfig)
+    try {
+      await window.jett.github.setConfig(newConfig)
+    } catch (e) {
+      console.error('Failed to save config', e)
     }
   }
 
   const handleMemoryPrefChange = async (key: string, value: any) => {
+    if (!memoryPrefs) return
     const newPrefs = { ...memoryPrefs, [key]: value }
-    setMemoryPrefs(newPrefs as MemoryPrefs)
-    await window.jett.memory.updateGlobal({ [key]: value })
-  }
-
-  const handlePluginToggle = (key: string, value: boolean) => {
-    const newToggles = { ...pluginToggles, [key]: value }
-    setPluginToggles(newToggles)
-    localStorage.setItem('jett-plugin-toggles', JSON.stringify(newToggles))
+    setMemoryPrefs(newPrefs)
+    try {
+      await window.jett.memory.setGlobal(newPrefs)
+    } catch (e) {
+      console.error('Failed to save memory prefs', e)
+    }
   }
 
   const clearAllMemory = async () => {
-    if (confirm('Clear all learned patterns and preferences? This cannot be undone.')) {
-      await window.jett.memory.clearAll()
-      const statsResult = await window.jett.memory.getStats()
-      if (statsResult.success) {
-        setMemoryStats(statsResult.stats)
+    if (confirm('Clear all learned patterns? This cannot be undone.')) {
+      try {
+        await window.jett.memory.clearAll()
+        setMemoryStats({ totalPatternsLearned: 0, projectsWithMemory: 0 })
+      } catch (e) {
+        console.error('Failed to clear memory', e)
       }
     }
   }
 
-  if (!isOpen) return null
+  const togglePlugin = (key: string) => {
+    const newToggles = { ...pluginToggles, [key]: !pluginToggles[key as keyof typeof pluginToggles] }
+    setPluginToggles(newToggles)
+    localStorage.setItem('jett-plugin-toggles', JSON.stringify(newToggles))
+  }
 
+  // Get current models for selected provider
   const currentModels = MODELS[provider as keyof typeof MODELS] || MODELS.anthropic
+
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Toast Notification */}
-      {showToast && (
-        <div 
-          className="fixed top-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in"
-          style={{ 
-            background: 'var(--success)', 
-            color: 'white'
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          API key saved successfully
-        </div>
-      )}
-      
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
       
-      {/* Panel */}
-      <div className="relative bg-[var(--bg-primary)] rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[85vh] flex flex-col border border-[var(--border-primary)]">
+      {/* Toast notification */}
+      {showToast && (
+        <div className="absolute top-6 right-6 z-[60] px-4 py-2 bg-emerald-500 text-white rounded-lg shadow-lg animate-fade-in">
+          ✓ {toastMessage}
+        </div>
+      )}
+
+      {/* Modal */}
+      <div 
+        className="relative w-full max-w-2xl max-h-[90vh] rounded-xl overflow-hidden flex flex-col"
+        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-primary)' }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
-          <h2 className="text-[var(--text-primary)] font-semibold text-lg flex items-center gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-            </svg>
-            Settings
-          </h2>
+        <div 
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <h2 className="text-lg font-semibold text-[var(--text-primary)]">Settings</h2>
           <button
             onClick={onClose}
-            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors p-2 rounded-lg hover:bg-[var(--bg-secondary)]"
+            className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xl"
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path d="M15 5L5 15M5 5l10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
+            ×
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-[var(--border-primary)]">
+        <div className="flex border-b" style={{ borderColor: 'var(--border-primary)' }}>
           {[
             { id: 'api', label: 'API', icon: (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -381,6 +487,62 @@ export default function SettingsPanel({
                 </div>
               </div>
 
+              {/* Vercel Token */}
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                  Vercel Token <span className="text-xs text-[var(--text-tertiary)]">(for publishing)</span>
+                </label>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type={showVercelToken ? 'text' : 'password'}
+                      value={vercelToken}
+                      onChange={(e) => setVercelToken(e.target.value)}
+                      placeholder="vercel_..."
+                      className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      onClick={() => setShowVercelToken(!showVercelToken)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    >
+                      {showVercelToken ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={saveVercelToken}
+                    className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                      vercelSaveStatus === 'saved' 
+                        ? 'bg-emerald-500 text-white' 
+                        : 'bg-blue-500 text-white hover:bg-blue-400'
+                    }`}
+                  >
+                    {vercelSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                  </button>
+                  {vercelToken && (
+                    <button
+                      onClick={() => {
+                        setVercelToken('')
+                        localStorage.removeItem('vercel_token')
+                        setVercelSaveStatus('idle')
+                      }}
+                      className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                      title="Clear Vercel Token"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Get your token at{' '}
+                  <button 
+                    onClick={() => window.jett?.openExternal?.('https://vercel.com/account/tokens')}
+                    className="text-blue-400 hover:underline"
+                  >
+                    vercel.com/account/tokens
+                  </button>
+                </p>
+              </div>
+
               {/* Model Selection */}
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -406,6 +568,31 @@ export default function SettingsPanel({
                       </div>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* App Version & Updates */}
+              <div className="pt-4 border-t" style={{ borderColor: 'var(--border-primary)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-[var(--text-secondary)]">Jett v{APP_VERSION}</div>
+                  {updateInfo?.available ? (
+                    <button
+                      onClick={() => window.jett?.openExternal?.(updateInfo.downloadUrl)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-500 text-white hover:bg-blue-400 transition-all flex items-center gap-2"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                      </svg>
+                      Download v{updateInfo.latestVersion}
+                    </button>
+                  ) : (
+                    <div className="px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-500/20 text-emerald-400 flex items-center gap-2">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 6L9 17l-5-5"/>
+                      </svg>
+                      No updates
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -444,23 +631,20 @@ export default function SettingsPanel({
               ].map(plugin => (
                 <div 
                   key={plugin.key}
-                  className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-primary)]"
+                  className="flex items-center justify-between p-4 rounded-xl"
+                  style={{ background: 'var(--bg-secondary)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-[var(--text-secondary)]">{plugin.icon}</span>
+                  <div className="flex items-center gap-4">
+                    <div className="text-[var(--text-secondary)]">
+                      {plugin.icon}
+                    </div>
                     <div>
                       <div className="text-[var(--text-primary)] font-medium">{plugin.name}</div>
-                      <div className="text-[var(--text-secondary)] text-xs">{plugin.desc}</div>
+                      <div className="text-[var(--text-secondary)] text-sm">{plugin.desc}</div>
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      if (plugin.key === 'autoCommit') {
-                        handleGitHubConfigChange('autoCommit', !pluginToggles.autoCommit)
-                      } else {
-                        handlePluginToggle(plugin.key, !pluginToggles[plugin.key as keyof typeof pluginToggles])
-                      }
-                    }}
+                    onClick={() => togglePlugin(plugin.key)}
                     className={`w-12 h-6 rounded-full transition-colors ${
                       pluginToggles[plugin.key as keyof typeof pluginToggles]
                         ? 'bg-blue-500'
