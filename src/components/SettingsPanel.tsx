@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react'
 
 // App version - should match package.json
-const APP_VERSION = '1.0.0'
+const APP_VERSION = __APP_VERSION__
 const GITHUB_REPO = 'jonathan-trustOS/jett-app'
 
 interface SettingsPanelProps {
