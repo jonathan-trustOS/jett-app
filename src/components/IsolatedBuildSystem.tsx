@@ -15,6 +15,7 @@
 import { useState, useRef, useEffect } from 'react'
 import CodePanel from './CodePanel'
 import { getPluginSettings } from './SettingsPanel'
+import { getSystemPrompt } from '../lib/prompts'
 import { IconBuild, IconCheck, IconClock, IconCode, IconDocument, IconRocket, IconRefresh } from './Icons'
 
 // Build step types
@@ -1067,18 +1068,7 @@ body {
   // ========================================
 
   const executeAIStep = async (prompt: string, stepIndex: number, retryCount = 0): Promise<boolean> => {
-    const systemPrompt = `You are a code generator. Output files using this EXACT format:
-
----FILE-START path="filepath"---
-file content
----FILE-END---
-
-RULES:
-- Use React 18 + TypeScript + Tailwind CSS
-- Dark theme (gray-800/900 backgrounds, gray-100 text)
-- Import types from '@/types'
-- Import shared UI from '@/components/ui'
-- Every file must be complete and runnable`
+    const systemPrompt = getSystemPrompt()
 
     try {
       const result = await window.jett.claudeApi(

@@ -43,29 +43,28 @@ Shortcuts: Cmd+N (new), Cmd+B (build), Cmd+, (settings)
 
 Keep answers concise.`
 
-// Header bubble component
+// Header tab component (matches other nav tabs)
 export function HelpBubble({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-1.5 px-3 h-10 rounded-full transition-all duration-150"
-      style={{
-        background: 'var(--bg-tertiary)',
-        border: '1px solid var(--border-primary)',
-        color: 'var(--text-secondary)'
+      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 flex items-center gap-1.5"
+      style={{ 
+        background: 'transparent',
+        color: 'var(--text-tertiary)'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--accent-primary)'
+        e.currentTarget.style.background = 'var(--bg-hover)'
         e.currentTarget.style.color = 'var(--text-primary)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'var(--border-primary)'
-        e.currentTarget.style.color = 'var(--text-secondary)'
+        e.currentTarget.style.background = 'transparent'
+        e.currentTarget.style.color = 'var(--text-tertiary)'
       }}
       title="Help"
     >
-      <IconSparkles size={14} style={{ color: 'var(--accent-primary)' }} />
-      <span className="text-sm font-medium">Help</span>
+      <IconSparkles size={14} />
+      Help
     </button>
   )
 }

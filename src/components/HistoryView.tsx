@@ -7,6 +7,23 @@ import { PublishedVersion, formatVersionDate } from './historyUtils'
 import PublishModal from './PublishModal'
 import RestoreModal from './RestoreModal'
 
+// Icons
+const IconMapPin = ({ size = 18, className = '' }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+    <circle cx="12" cy="10" r="3"/>
+  </svg>
+)
+
+const IconRocket = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+    <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+    <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
+    <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+  </svg>
+)
+
 interface HistoryViewProps {
   projectPath: string
   projectName: string
@@ -37,7 +54,7 @@ export default function HistoryView({
       <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-primary)]">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-red-500">📍</span>
+          <IconMapPin size={16} className="text-red-500" />
             <span className="text-[var(--text-primary)] font-medium">Current Draft</span>
           </div>
           <span className="text-[var(--text-secondary)] text-sm">Last edited recently</span>
@@ -46,7 +63,7 @@ export default function HistoryView({
           onClick={() => setShowPublishModal(true)}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-400 transition-colors flex items-center gap-2"
         >
-          Publish 🚀
+          <IconRocket size={14} /> Publish
         </button>
       </div>
 
