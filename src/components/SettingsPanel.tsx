@@ -82,6 +82,12 @@ export default function SettingsPanel({
   const [vercelToken, setVercelToken] = useState('')
   const [showVercelToken, setShowVercelToken] = useState(false)
   const [vercelSaveStatus, setVercelSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // Supabase state
+  const [supabaseUrl, setSupabaseUrl] = useState('')
+  const [supabaseAnonKey, setSupabaseAnonKey] = useState('')
+  const [showSupabaseKey, setShowSupabaseKey] = useState(false)
+  const [supabaseSaveStatus, setSupabaseSaveStatus] = useState<'idle' | 'saved'>('idle')
   
   // GitHub state
   const [githubAuth, setGithubAuth] = useState<GitHubAuth | null>(null)
@@ -154,6 +160,12 @@ export default function SettingsPanel({
     if (savedVercelToken) {
       setVercelToken(savedVercelToken)
     }
+
+    // Load Supabase credentials
+    const savedSupabaseUrl = localStorage.getItem('supabase_url')
+    const savedSupabaseKey = localStorage.getItem('supabase_anon_key')
+    if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl)
+    if (savedSupabaseKey) setSupabaseAnonKey(savedSupabaseKey)
     
     // Load last update check info
     const savedUpdateInfo = localStorage.getItem('jett-update-info')
@@ -247,6 +259,23 @@ export default function SettingsPanel({
     }, 2000)
     
     // Hide toast after 3 seconds
+    setTimeout(() => {
+      setShowToast(false)
+    }, 3000)
+  }
+
+  const saveSupabase = () => {
+    localStorage.setItem('supabase_url', supabaseUrl)
+    localStorage.setItem('supabase_anon_key', supabaseAnonKey)
+    
+    setSupabaseSaveStatus('saved')
+    setToastMessage('Supabase credentials saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => {
+      setSupabaseSaveStatus('idle')
+    }, 2000)
+    
     setTimeout(() => {
       setShowToast(false)
     }, 3000)
@@ -485,6 +514,19 @@ export default function SettingsPanel({
                     </button>
                   )}
                 </div>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Get your key at{' '}
+                  <button 
+                    onClick={() => window.jett?.openExternal?.(
+                      provider === 'openrouter' 
+                        ? 'https://openrouter.ai/keys' 
+                        : 'https://console.anthropic.com/settings/keys'
+                    )}
+                    className="text-blue-400 hover:underline"
+                  >
+                    {provider === 'openrouter' ? 'openrouter.ai/keys' : 'console.anthropic.com/settings/keys'}
+                  </button>
+                </p>
               </div>
 
               {/* Vercel Token */}
@@ -539,6 +581,77 @@ export default function SettingsPanel({
                     className="text-blue-400 hover:underline"
                   >
                     vercel.com/account/tokens
+                  </button>
+                </p>
+              </div>
+
+{/* Supabase Credentials */}
+<div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                  Supabase <span className="text-xs text-[var(--text-tertiary)]">(for database)</span>
+                </label>
+                
+                {/* Supabase URL */}
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={supabaseUrl}
+                    onChange={(e) => setSupabaseUrl(e.target.value)}
+                    placeholder="https://xxxxx.supabase.co"
+                    className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                </div>
+                
+                {/* Supabase Anon Key */}
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type={showSupabaseKey ? 'text' : 'password'}
+                      value={supabaseAnonKey}
+                      onChange={(e) => setSupabaseAnonKey(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIs..."
+                      className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+                    <button
+                      onClick={() => setShowSupabaseKey(!showSupabaseKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                    >
+                      {showSupabaseKey ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={saveSupabase}
+                    className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                      supabaseSaveStatus === 'saved' 
+                        ? 'bg-emerald-500 text-white' 
+                        : 'bg-blue-500 text-white hover:bg-blue-400'
+                    }`}
+                  >
+                    {supabaseSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                  </button>
+                  {(supabaseUrl || supabaseAnonKey) && (
+                    <button
+                      onClick={() => {
+                        setSupabaseUrl('')
+                        setSupabaseAnonKey('')
+                        localStorage.removeItem('supabase_url')
+                        localStorage.removeItem('supabase_anon_key')
+                        setSupabaseSaveStatus('idle')
+                      }}
+                      className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                      title="Clear Supabase"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Get your credentials at{' '}
+                  <button 
+                    onClick={() => window.jett?.openExternal?.('https://supabase.com/dashboard/project/_/settings/api')}
+                    className="text-blue-400 hover:underline"
+                  >
+                    supabase.com/dashboard → Settings → API
                   </button>
                 </p>
               </div>
