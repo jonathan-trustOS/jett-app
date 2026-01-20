@@ -88,6 +88,11 @@ export default function SettingsPanel({
   const [supabaseAnonKey, setSupabaseAnonKey] = useState('')
   const [showSupabaseKey, setShowSupabaseKey] = useState(false)
   const [supabaseSaveStatus, setSupabaseSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // Convex state
+  const [convexUrl, setConvexUrl] = useState('')
+  const [showConvexKey, setShowConvexKey] = useState(false)
+  const [convexSaveStatus, setConvexSaveStatus] = useState<'idle' | 'saved'>('idle')
   
   // GitHub state
   const [githubAuth, setGithubAuth] = useState<GitHubAuth | null>(null)
@@ -110,6 +115,16 @@ export default function SettingsPanel({
     autoCommit: false,
     memoryLearning: true
   })
+
+  // Build settings
+  const [buildSettings, setBuildSettings] = useState({
+    maxIterations: 3,
+    useCheaperModels: true,
+    writeProgressLog: true
+  })
+
+  // Theme state
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('system')
 
   useEffect(() => {
     if (isOpen) {
@@ -154,6 +169,20 @@ export default function SettingsPanel({
         setPluginToggles(JSON.parse(saved))
       } catch (e) {}
     }
+
+    // Load build settings
+    const savedBuildSettings = localStorage.getItem('jett-build-settings')
+    if (savedBuildSettings) {
+      try {
+        setBuildSettings(prev => ({ ...prev, ...JSON.parse(savedBuildSettings) }))
+      } catch (e) {}
+    }
+
+    // Load theme
+    const savedTheme = localStorage.getItem('jett-theme')
+    if (savedTheme) {
+      setTheme(savedTheme as 'system' | 'light' | 'dark')
+    }
     
     // Load Vercel token
     const savedVercelToken = localStorage.getItem('vercel_token')
@@ -161,11 +190,9 @@ export default function SettingsPanel({
       setVercelToken(savedVercelToken)
     }
 
-    // Load Supabase credentials
-    const savedSupabaseUrl = localStorage.getItem('supabase_url')
-    const savedSupabaseKey = localStorage.getItem('supabase_anon_key')
-    if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl)
-    if (savedSupabaseKey) setSupabaseAnonKey(savedSupabaseKey)
+    // Load Convex credentials
+    const savedConvexUrl = localStorage.getItem('convex_url')
+    if (savedConvexUrl) setConvexUrl(savedConvexUrl)
     
     // Load last update check info
     const savedUpdateInfo = localStorage.getItem('jett-update-info')
@@ -281,6 +308,22 @@ export default function SettingsPanel({
     }, 3000)
   }
 
+  const saveConvex = () => {
+    localStorage.setItem('convex_url', convexUrl)
+    
+    setConvexSaveStatus('saved')
+    setToastMessage('Convex URL saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => {
+      setConvexSaveStatus('idle')
+    }, 2000)
+    
+    setTimeout(() => {
+      setShowToast(false)
+    }, 3000)
+  }
+
   const handleProviderChange = (newProvider: string) => {
     onProviderChange(newProvider)
     localStorage.setItem('jett-provider', newProvider)
@@ -359,6 +402,26 @@ export default function SettingsPanel({
     localStorage.setItem('jett-plugin-toggles', JSON.stringify(newToggles))
   }
 
+  const updateBuildSetting = (key: string, value: any) => {
+    const newSettings = { ...buildSettings, [key]: value }
+    setBuildSettings(newSettings)
+    localStorage.setItem('jett-build-settings', JSON.stringify(newSettings))
+  }
+
+  const handleThemeChange = (newTheme: 'system' | 'light' | 'dark') => {
+    setTheme(newTheme)
+    localStorage.setItem('jett-theme', newTheme)
+    
+    // Apply theme to document
+    const root = document.documentElement
+    if (newTheme === 'system') {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      root.setAttribute('data-theme', prefersDark ? 'dark' : 'light')
+    } else {
+      root.setAttribute('data-theme', newTheme)
+    }
+  }
+
   // Get current models for selected provider
   const currentModels = MODELS[provider as keyof typeof MODELS] || MODELS.anthropic
 
@@ -400,7 +463,7 @@ export default function SettingsPanel({
 
         {/* Tabs */}
         <div className="flex border-b" style={{ borderColor: 'var(--border-primary)' }}>
-          {[
+        {[
             { id: 'api', label: 'API', icon: (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
@@ -414,6 +477,19 @@ export default function SettingsPanel({
             { id: 'github', label: 'GitHub', icon: (
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+              </svg>
+            )},
+            { id: 'appearance', label: 'Appearance', icon: (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
               </svg>
             )},
             { id: 'memory', label: 'Memory', icon: (
@@ -656,6 +732,51 @@ export default function SettingsPanel({
                 </p>
               </div>
 
+              {/* Convex */}
+              <div className="pt-4 border-t border-[var(--border-primary)]">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium text-[var(--text-secondary)]">Convex (Optional)</h3>
+                  
+                  <a href="https://dashboard.convex.dev"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    Get Deployment URL →
+                  </a>
+                </div>
+                <p className="text-xs text-[var(--text-tertiary)] mb-3">
+                  Real-time database alternative to Supabase. AI will use Convex when configured.
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-[var(--text-secondary)] mb-1">
+                      Deployment URL
+                    </label>
+                    <input
+                      type="text"
+                      value={convexUrl}
+                      onChange={(e) => setConvexUrl(e.target.value)}
+                      placeholder="https://your-app.convex.cloud"
+                      className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] text-sm placeholder-[var(--text-tertiary)]"
+                    />
+                  </div>
+                  
+                  <button
+                    onClick={saveConvex}
+                    disabled={!convexUrl.trim()}
+                    className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
+                      convexSaveStatus === 'saved'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-blue-500 text-white hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed'
+                    }`}
+                  >
+                    {convexSaveStatus === 'saved' ? '✓ Saved' : 'Save Convex URL'}
+                  </button>
+                </div>
+              </div>
+
               {/* Model Selection */}
               <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
@@ -772,6 +893,78 @@ export default function SettingsPanel({
                   </button>
                 </div>
               ))}
+
+              {/* Build Settings Section */}
+              <div className="pt-4 mt-4 border-t border-[var(--border-primary)]">
+                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Build Settings</h3>
+                
+                {/* Max Iterations */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="text-[var(--text-primary)] text-sm">Max Auto-Fix Attempts</div>
+                      <div className="text-[var(--text-secondary)] text-xs">How many times to retry failed steps</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateBuildSetting('maxIterations', Math.max(1, buildSettings.maxIterations - 1))}
+                        className="w-8 h-8 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)]"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center text-[var(--text-primary)] font-mono">{buildSettings.maxIterations}</span>
+                      <button
+                        onClick={() => updateBuildSetting('maxIterations', Math.min(10, buildSettings.maxIterations + 1))}
+                        className="w-8 h-8 rounded-lg bg-[var(--bg-tertiary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)]"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Use Cheaper Models */}
+                <div 
+                  className="flex items-center justify-between p-4 rounded-xl mb-3"
+                  style={{ background: 'var(--bg-secondary)' }}
+                >
+                  <div>
+                    <div className="text-[var(--text-primary)] text-sm">Use Faster Models for Simple Tasks</div>
+                    <div className="text-[var(--text-secondary)] text-xs">Uses Haiku for templates, Sonnet for modules</div>
+                  </div>
+                  <button
+                    onClick={() => updateBuildSetting('useCheaperModels', !buildSettings.useCheaperModels)}
+                    className={`w-12 h-6 rounded-full transition-colors ${
+                      buildSettings.useCheaperModels ? 'bg-blue-500' : 'bg-slate-600'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      buildSettings.useCheaperModels ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+
+                {/* Write Progress Log */}
+                <div 
+                  className="flex items-center justify-between p-4 rounded-xl"
+                  style={{ background: 'var(--bg-secondary)' }}
+                >
+                  <div>
+                    <div className="text-[var(--text-primary)] text-sm">Write Progress Log</div>
+                    <div className="text-[var(--text-secondary)] text-xs">Saves PROGRESS.md in project folder</div>
+                  </div>
+                  <button
+                    onClick={() => updateBuildSetting('writeProgressLog', !buildSettings.writeProgressLog)}
+                    className={`w-12 h-6 rounded-full transition-colors ${
+                      buildSettings.writeProgressLog ? 'bg-blue-500' : 'bg-slate-600'
+                    }`}
+                  >
+                    <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      buildSettings.writeProgressLog ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -865,6 +1058,61 @@ export default function SettingsPanel({
             </div>
           )}
 
+{/* Appearance Tab */}
+{activeTab === 'appearance' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Theme</h3>
+                <div className="flex gap-3">
+                  {[
+                    { id: 'system', label: 'System', icon: (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                        <line x1="8" y1="21" x2="16" y2="21"/>
+                        <line x1="12" y1="17" x2="12" y2="21"/>
+                      </svg>
+                    )},
+                    { id: 'light', label: 'Light', icon: (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                      </svg>
+                    )},
+                    { id: 'dark', label: 'Dark', icon: (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                      </svg>
+                    )}
+                  ].map(option => (
+                    <button
+                      key={option.id}
+                      onClick={() => handleThemeChange(option.id as 'system' | 'light' | 'dark')}
+                      className={`flex-1 flex flex-col items-center gap-2 p-4 rounded-xl transition-colors ${
+                        theme === option.id
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                      }`}
+                    >
+                      {option.icon}
+                      <span className="text-sm font-medium">{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <p className="text-xs text-[var(--text-tertiary)]">
+                System will automatically match your operating system's appearance setting.
+              </p>
+            </div>
+          )}
+
           {/* Memory Tab */}
           {activeTab === 'memory' && (
             <div className="space-y-6">
@@ -902,8 +1150,8 @@ export default function SettingsPanel({
                             onClick={() => handleMemoryPrefChange(pref.key, opt)}
                             className={`flex-1 py-2 px-3 rounded-lg text-sm transition-colors ${
                               memoryPrefs[pref.key as keyof MemoryPrefs] === opt
-                                ? 'bg-blue-500 text-[var(--text-primary)]'
-                                : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)]'
+                                ? 'bg-blue-500 text-white'
+                                : 'bg-[var(--bg-tertiary)] text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
                             }`}
                           >
                             {opt}

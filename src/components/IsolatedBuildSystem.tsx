@@ -15,7 +15,14 @@
 import { useState, useRef, useEffect } from 'react'
 import CodePanel from './CodePanel'
 import { getPluginSettings } from './SettingsPanel'
-import { getSystemPrompt } from '../lib/prompts'
+import { getSystemPrompt, getModelForStep, getBuildSettings, BuildStepType, parseCompletionSignal } from '../lib/prompts'
+import { 
+  initProgressLog, 
+  logStepStart, 
+  logStepComplete, 
+  logStepFailed, 
+  writeProgressLog 
+} from '../lib/progressLog'
 import { IconBuild, IconCheck, IconClock, IconCode, IconDocument, IconRocket, IconRefresh } from './Icons'
 
 // Build step types
@@ -1069,14 +1076,19 @@ body {
 
   const executeAIStep = async (prompt: string, stepIndex: number, retryCount = 0): Promise<boolean> => {
     const systemPrompt = getSystemPrompt()
+    
+    // Get appropriate model for this step type
+    const step = buildSteps[stepIndex]
+    const stepType = (step?.type || 'module') as BuildStepType
+    const { provider: stepProvider, model: stepModel } = getModelForStep(stepType, provider, model)
 
     try {
       const result = await window.jett.claudeApi(
         apiKey,
         JSON.stringify([{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]),
         undefined,
-        provider,
-        model
+        stepProvider,
+        stepModel
       )
 
       if (!result.success) {
@@ -1107,10 +1119,26 @@ body {
         filesCreated.push(filePath)
       }
 
+      // Check for explicit completion signal
+      const completion = parseCompletionSignal(result.text)
+      
+      if (completion.complete) {
+        if (completion.success) {
+          addFilesToStep(stepIndex, filesCreated)
+          setLastFileUpdate(Date.now())
+          log(`  ✅ Task complete (${filesWritten} files)`)
+          return true
+        } else {
+          log(`  ❌ Task failed: ${completion.reason || 'Unknown error'}`)
+          return false
+        }
+      }
+      
+      // Fallback: infer success from file output
       if (filesWritten > 0) {
         addFilesToStep(stepIndex, filesCreated)
         setLastFileUpdate(Date.now())
-        log(`  ✅ ${filesWritten} files created`)
+        log(`  ✅ ${filesWritten} files created (no completion signal)`)
         return true
       } else {
         log(`  ⚠️ No files extracted from response`)
@@ -1144,6 +1172,9 @@ body {
     
     log('🚀 Starting isolated module build...')
 
+    // Initialize progress log
+    initProgressLog(project.prd?.overview?.name || project.name || 'Untitled')
+
     // Find first incomplete step
     const startIndex = buildSteps.findIndex(s => s.status !== 'complete')
     if (startIndex === -1) {
@@ -1156,7 +1187,7 @@ body {
     }
 
     // Execute steps sequentially with auto-fix retry
-    const MAX_RETRIES = 3
+    const MAX_RETRIES = getBuildSettings().maxIterations
     let allStepsCompleted = true
     
     for (let i = startIndex; i < buildSteps.length; i++) {
@@ -1168,6 +1199,9 @@ body {
       while (!success && attempts < MAX_RETRIES) {
         attempts++
         
+        // Log step attempt
+        logStepStart(buildSteps[i], attempts)
+        
         if (attempts > 1) {
           log(`  🔄 Auto-fix attempt ${attempts}/${MAX_RETRIES}...`)
           // Brief pause before retry
@@ -1175,6 +1209,13 @@ body {
         }
         
         success = await executeBuildStep(buildSteps[i], i)
+      }
+      
+      // Log step result
+      if (success) {
+        logStepComplete(buildSteps[i], attempts)
+      } else {
+        logStepFailed(buildSteps[i], attempts)
       }
       
       if (!success) {
@@ -1189,6 +1230,14 @@ body {
 
     setCurrentStepIndex(null)
     log('\n🏁 Build process finished')
+    
+    // Write progress log
+    writeProgressLog(
+      project.id,
+      project.prd?.overview?.name || project.name || 'Untitled',
+      buildSteps,
+      totalElapsed
+    )
     
     // Stop total build timer (keep elapsed value for display)
     setTotalBuildStart(null)

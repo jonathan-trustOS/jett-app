@@ -175,7 +175,7 @@ export default function ReviewView({
       {/* Header */}
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-gray-400">{getCategoryIcon(item.category)}</span>
+        <span className="text-[var(--text-secondary)]">{getCategoryIcon(item.category)}</span>
           <span className="text-sm font-medium text-[var(--text-primary)] truncate">{item.title}</span>
         </div>
         <span className={`text-xs px-1.5 py-0.5 rounded capitalize flex-shrink-0 ${
@@ -190,7 +190,7 @@ export default function ReviewView({
       
       {/* File path */}
       {item.file && (
-        <p className="text-xs text-gray-500 font-mono truncate mb-2">{item.file}</p>
+        <p className="text-xs text-[var(--text-tertiary)] font-mono truncate mb-2">{item.file}</p>
       )}
       
       {/* Description - collapsed by default */}
@@ -201,16 +201,16 @@ export default function ReviewView({
         <div className="flex gap-2 mt-2">
           <button
             onClick={() => handleBuildImprovement(item)}
-            className="flex-1 px-2 py-1.5 text-xs bg-[var(--accent-primary)] text-white rounded hover:bg-[var(--accent-primary-hover)] flex items-center justify-center gap-1"
+            className="flex-1 px-2 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-400 flex items-center justify-center gap-1"
           >
             <IconSparkles size={12} /> Fix
           </button>
           <button
-            onClick={() => handleDismiss(item)}
-            className="px-2 py-1.5 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600"
-          >
-            Skip
-          </button>
+  onClick={() => handleDismiss(item)}
+  className="px-2 py-1.5 text-xs bg-[var(--bg-tertiary)] text-[var(--text-secondary)] rounded hover:bg-[var(--bg-hover)]"
+>
+  Skip
+</button>
         </div>
       )}
       
@@ -233,11 +233,11 @@ export default function ReviewView({
       {/* Restore button for dismissed */}
       {item.status === 'dismissed' && (
         <button
-          onClick={() => handleRestore(item)}
-          className="mt-2 px-2 py-1 text-xs text-gray-400 hover:text-white"
-        >
-          ↩ Restore
-        </button>
+        onClick={() => handleRestore(item)}
+        className="mt-2 px-2 py-1 text-xs text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+      >
+        ↩ Restore
+      </button>
       )}
     </div>
   )
@@ -262,7 +262,7 @@ export default function ReviewView({
       {/* Cards */}
       <div className="flex-1 overflow-y-auto pr-1 space-y-2">
         {items.length === 0 ? (
-          <p className="text-sm text-gray-600 text-center py-8">No items</p>
+          <p className="text-sm text-[var(--text-tertiary)] text-center py-8">No items</p>
         ) : (
           items.map(item => renderCard(item, showActions))
         )}
@@ -289,7 +289,7 @@ export default function ReviewView({
               <button
                 onClick={() => onAutoReviewToggle(!autoReview)}
                 className={`w-10 h-5 rounded-full transition-colors ${
-                  autoReview ? 'bg-[var(--accent-primary)]' : 'bg-gray-600'
+                  autoReview ? 'bg-blue-500' : 'bg-[var(--bg-tertiary)]'
                 }`}
               >
                 <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-0.5 ${
@@ -301,7 +301,7 @@ export default function ReviewView({
             <button
               onClick={handleRunReview}
               disabled={isRunning}
-              className="px-4 py-2 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary-hover)] disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-400 disabled:opacity-50 flex items-center gap-2"
             >
               <IconRefresh size={16} className={isRunning ? 'animate-spin' : ''} />
               {isRunning ? 'Analyzing...' : 'Run Review'}
@@ -321,7 +321,7 @@ export default function ReviewView({
             <button
               onClick={handleRunReview}
               disabled={isRunning}
-              className="px-6 py-3 bg-[var(--accent-primary)] text-white rounded-lg hover:bg-[var(--accent-primary-hover)] disabled:opacity-50 flex items-center gap-2 mx-auto"
+              className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-400 disabled:opacity-50 flex items-center gap-2 mx-auto"
             >
               <IconRefresh size={16} className={isRunning ? 'animate-spin' : ''} />
               {isRunning ? 'Analyzing...' : 'Start Review'}
@@ -367,7 +367,7 @@ export default function ReviewView({
             <button
               onClick={() => onAutoReviewToggle(!autoReview)}
               className={`w-10 h-5 rounded-full transition-colors ${
-                autoReview ? 'bg-[var(--accent-primary)]' : 'bg-gray-600'
+                autoReview ? 'bg-blue-500' : 'bg-[var(--bg-tertiary)]'
               }`}
             >
               <div className={`w-4 h-4 rounded-full bg-white transition-transform mx-0.5 ${
@@ -377,10 +377,10 @@ export default function ReviewView({
           </label>
           
           <button
-            onClick={handleRunReview}
-            disabled={isRunning}
-            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center gap-2"
-          >
+  onClick={handleRunReview}
+  disabled={isRunning}
+  className="px-4 py-2 bg-[var(--bg-tertiary)] text-[var(--text-primary)] rounded-lg hover:bg-[var(--bg-hover)] disabled:opacity-50 flex items-center gap-2"
+>
             <IconRefresh size={16} className={isRunning ? 'animate-spin' : ''} />
             Re-run
           </button>
@@ -424,7 +424,7 @@ export default function ReviewView({
             onClick={() => setSelectedCategory(key as any)}
             className={`px-3 py-1.5 text-sm rounded-full whitespace-nowrap flex items-center gap-1.5 ${
               selectedCategory === key
-                ? 'bg-[var(--accent-primary)] text-white'
+                ? 'bg-blue-500 text-white'
                 : 'bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] hover:bg-[var(--bg-hover)]'
             }`}
           >
