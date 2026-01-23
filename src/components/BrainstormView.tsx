@@ -38,6 +38,7 @@ interface PRDCapture {
 
 interface ExtractedCapture extends PRDCapture {
   selected: boolean
+  action?: 'add' | 'update'
 }
 
 interface Idea {
@@ -48,10 +49,13 @@ interface Idea {
   chat: ChatMessage[]
   prdCaptures: {
     overview: PRDCapture[]
-    features: PRDCapture[]
     users: PRDCapture[]
+    features: PRDCapture[]
     screens: PRDCapture[]
+    moodBoard: PRDCapture[]
     data: PRDCapture[]
+    techStack: PRDCapture[]
+    competitors: PRDCapture[]
     design: PRDCapture[]
   }
   createdAt: string
@@ -90,17 +94,46 @@ const TAG_SUGGESTIONS = [
 
 const PRD_SECTIONS = [
   { key: 'overview', label: 'Overview', icon: IconDocument },
+  { key: 'users', label: 'Target Users', icon: IconChart },
   { key: 'features', label: 'Features', icon: IconSparkles },
-  { key: 'users', label: 'Users', icon: IconChart },
   { key: 'screens', label: 'Screens', icon: IconNote },
+  { key: 'moodBoard', label: 'Mood Board', icon: IconLightbulb },
   { key: 'data', label: 'Data Model', icon: IconCog },
-  { key: 'design', label: 'Design', icon: IconLightbulb },
+  { key: 'techStack', label: 'Tech Stack', icon: IconCog },
+  { key: 'competitors', label: 'Competitors', icon: IconChart },
+  { key: 'design', label: 'Design Notes', icon: IconLightbulb },
 ] as const
 
-// Migrate legacy idea to new format
+// Migrate legacy idea to new format - ensures ALL fields exist
 function migrateIdea(idea: any): Idea {
-  if ('chat' in idea && 'prdCaptures' in idea) {
-    return idea as Idea
+  // Default prdCaptures structure - always ensures all keys exist
+  const defaultCaptures = {
+    overview: [],
+    users: [],
+    features: [],
+    screens: [],
+    moodBoard: [],
+    data: [],
+    techStack: [],
+    competitors: [],
+    design: []
+  }
+  
+  // Merge existing captures with defaults (fills in missing keys)
+  const existingCaptures = idea.prdCaptures || {}
+  const mergedCaptures = {
+    ...defaultCaptures,
+    ...existingCaptures
+  }
+  
+  // For truly legacy ideas without prdCaptures, seed overview from description
+  if (!idea.prdCaptures && idea.description) {
+    mergedCaptures.overview = [{
+      id: `capture-${Date.now()}`,
+      section: 'overview',
+      content: idea.description,
+      timestamp: idea.createdAt
+    }]
   }
   
   return {
@@ -108,20 +141,8 @@ function migrateIdea(idea: any): Idea {
     title: idea.title,
     description: idea.description,
     tags: idea.tags || [],
-    chat: [],
-    prdCaptures: {
-      overview: idea.description ? [{
-        id: `capture-${Date.now()}`,
-        section: 'overview',
-        content: idea.description,
-        timestamp: idea.createdAt
-      }] : [],
-      features: [],
-      users: [],
-      screens: [],
-      data: [],
-      design: []
-    },
+    chat: idea.chat || [],
+    prdCaptures: mergedCaptures,
     createdAt: idea.createdAt,
     updatedAt: idea.updatedAt,
     status: idea.status === 'researching' ? 'chatting' : (idea.status as any),
@@ -314,11 +335,10 @@ Keep it conversational and supportive. Do NOT use any special formatting tags.`
         )
         onIdeasUpdate(updatedIdeas)
         
-        // If bulk content, save for manual extraction and trigger auto-extraction
+        // Save bulk content for manual extraction (user clicks Capture button)
         if (hasBulkContent) {
-          console.log('Bulk content detected in description, triggering extraction...')
+          console.log('Bulk content detected - user can capture manually when ready')
           setLastBulkContent(idea.description)
-          setTimeout(() => extractCapturesFromContent(idea.description, idea.id, updatedIdeas), 1000)
         }
       } else if (result.error) {
         console.error('API error:', result.error)
@@ -341,24 +361,43 @@ Keep it conversational and supportive. Do NOT use any special formatting tags.`
     console.log('Content length:', cleanContent.length)
     setIsExtracting(true)
     
+    // Get existing captures for deduplication
+    const ideasToCheck = currentIdeas || allIdeas
+    const ideaToCheck = ideasToCheck.find(i => i.id === ideaId)
+    const existingCaptures = ideaToCheck ? Object.entries(ideaToCheck.prdCaptures)
+      .flatMap(([section, captures]) => captures.map(c => `[${section}] ${c.content}`))
+      .join('\n') : ''
+
     const extractionPrompt = `Analyze this product description and extract structured PRD elements.
 
 CONTENT TO ANALYZE:
 ${cleanContent}
 
+${existingCaptures ? `EXISTING CAPTURES (do NOT duplicate these):
+${existingCaptures}
+
+IMPORTANT: Skip any ideas that are already captured above. Only extract NEW information.
+If an existing capture could be improved/expanded, output it with "action": "update" and include the improvement.
+` : ''}
 Return a JSON array of extracted items. Each item must have:
 - "section": one of "overview", "features", "users", "screens", "data", "design"
 - "content": the extracted detail (keep it concise but complete)
+- "action": "add" for new items, "update" for improving existing items (optional, defaults to "add")
 
 Section guidelines:
-- overview: High-level descriptions, goals, problem statements (2-3 items)
-- features: Specific functionality, capabilities, tools (can be many)
-- users: User types, personas, target audience (1-3 items)
-- screens: Pages, views, UI sections, modals (can be many)
-- data: Entities, models, fields, relationships (can be many)
-- design: Visual direction, UX patterns, accessibility notes (2-4 items)
+- overview: High-level descriptions, goals, problem statements (2-3 items max)
+- features: Specific functionality, capabilities, tools (be specific, avoid generic)
+- users: User types, personas, target audience (1-3 items max)
+- screens: Pages, views, UI sections, modals (be specific)
+- data: Entities, models, fields, relationships
+- design: Visual direction, UX patterns, accessibility notes (2-4 items max)
 
-Extract as many relevant items as you find. Be thorough but avoid duplicates.
+DEDUPLICATION RULES:
+1. If the content is essentially the same as an existing capture, SKIP IT
+2. If the content adds new detail to an existing capture, mark as "update"
+3. Only "add" genuinely new information not covered by existing captures
+
+Be selective and avoid redundancy. Quality over quantity.
 
 CRITICAL: Respond with ONLY a valid JSON array. No markdown code blocks, no explanation, no preamble. Just the raw JSON array starting with [ and ending with ]`
 
@@ -467,17 +506,31 @@ CRITICAL: Respond with ONLY a valid JSON array. No markdown code blocks, no expl
       return
     }
     
-    // Convert to regular PRDCaptures and add to idea
-    const newCaptures: PRDCapture[] = selected.map(c => ({
-      id: c.id,
-      section: c.section,
-      content: c.content,
-      timestamp: c.timestamp
-    }))
-    
+    // Convert to regular PRDCaptures, handling both adds and updates
     const updatedCaptures = { ...selectedIdea.prdCaptures }
-    for (const capture of newCaptures) {
-      updatedCaptures[capture.section] = [...updatedCaptures[capture.section], capture]
+    
+    for (const capture of selected) {
+      const newCapture: PRDCapture = {
+        id: capture.id,
+        section: capture.section,
+        content: capture.content,
+        timestamp: capture.timestamp
+      }
+      
+      // Check if this is an update to existing capture (similar content)
+      const existingIndex = updatedCaptures[capture.section].findIndex(
+        existing => existing.content.toLowerCase().includes(capture.content.toLowerCase().slice(0, 30)) ||
+                    capture.content.toLowerCase().includes(existing.content.toLowerCase().slice(0, 30))
+      )
+      
+      if (existingIndex >= 0 && (capture as any).action === 'update') {
+        // Replace existing with updated version
+        updatedCaptures[capture.section][existingIndex] = newCapture
+        console.log(`Updated existing capture in ${capture.section}`)
+      } else {
+        // Add as new
+        updatedCaptures[capture.section] = [...updatedCaptures[capture.section], newCapture]
+      }
     }
     
     const totalCaptures = Object.values(updatedCaptures).reduce((sum, arr) => sum + arr.length, 0)
@@ -570,18 +623,10 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
         const finalChat = [...updatedChat, aiMessage]
         updateIdea(selectedIdea.id, { chat: finalChat })
         
-        // If bulk content, save for manual extraction and trigger auto-extraction
+        // Track content but don't auto-extract - user controls when to capture
         if (isBulk) {
-          console.log('Bulk message detected, saving for extraction...')
-          console.log('Message content length:', messageContent.length)
+          console.log('Substantial content detected - available for capture')
           setLastBulkContent(messageContent)
-          // Auto-trigger extraction
-          setTimeout(() => {
-            console.log('Auto-triggering extraction now...')
-            extractCapturesFromContent(messageContent, selectedIdea.id)
-          }, 500)
-        } else {
-          console.log('Not bulk content, skipping extraction')
         }
       }
     } catch (error) {
@@ -1223,8 +1268,8 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
               </div>
 
               <div className="flex-1 overflow-auto p-2">
-                {PRD_SECTIONS.map(({ key, label, icon: Icon }) => {
-                  const captures = selectedIdea.prdCaptures[key as keyof Idea['prdCaptures']]
+              {PRD_SECTIONS.map(({ key, label, icon: Icon }) => {
+                  const captures = selectedIdea.prdCaptures[key as keyof Idea['prdCaptures']] || []
                   return (
                     <div key={key} className="mb-3">
                       <div className="flex items-center gap-2 mb-1 px-2">
@@ -1425,7 +1470,7 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
                   </div>
                   
                   <div className="space-y-1">
-                    {captures.map(capture => (
+                  {captures.map(capture => (
                       <label
                         key={capture.id}
                         className="flex items-start gap-3 p-2 rounded-lg cursor-pointer transition-colors"
@@ -1441,12 +1486,22 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
                           className="mt-0.5 rounded"
                           style={{ accentColor: 'var(--accent-primary)' }}
                         />
-                        <span 
-                          className="text-sm flex-1"
-                          style={{ color: capture.selected ? 'var(--text-primary)' : 'var(--text-secondary)' }}
-                        >
-                          {capture.content}
-                        </span>
+                        <div className="flex-1">
+                          <span 
+                            className="text-sm"
+                            style={{ color: capture.selected ? 'var(--text-primary)' : 'var(--text-secondary)' }}
+                          >
+                            {capture.content}
+                          </span>
+                          {capture.action === 'update' && (
+                            <span 
+                              className="ml-2 text-xs px-1.5 py-0.5 rounded"
+                              style={{ background: '#f59e0b20', color: '#f59e0b' }}
+                            >
+                              updates existing
+                            </span>
+                          )}
+                        </div>
                       </label>
                     ))}
                   </div>

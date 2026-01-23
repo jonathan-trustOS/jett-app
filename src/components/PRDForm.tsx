@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 // Inline SVG icons for PRD sections
 const IconClipboard = ({ size = 18 }: { size?: number }) => (
@@ -104,6 +104,20 @@ const IconDownload = ({ size = 18 }: { size?: number }) => (
   </svg>
 )
 
+const IconX = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18"/>
+    <line x1="6" y1="6" x2="18" y2="18"/>
+  </svg>
+)
+
+const IconUpload = ({ size = 18 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+    <polyline points="17 8 12 3 7 8"/>
+    <line x1="12" y1="3" x2="12" y2="15"/>
+  </svg>
+)
 
 interface Idea {
   id: string
@@ -132,15 +146,24 @@ interface Screen {
   id: string
   name: string
   description: string
+  imagePath?: string
+}
+
+interface MoodBoardImage {
+  id: string
+  path: string
+  label?: string
+  createdAt: string
 }
 
 interface PRD {
   overview: { name: string; description: string; coreGoal: string; platform: 'web' | 'mobile' | 'both' }
   targetUsers: { primaryUser: string; userNeeds: string }
-  ideas: Idea[]  // NEW: Ideas for brainstorming
+  ideas: Idea[]
   features: Feature[]
   dataModel: { needsDatabase: boolean; entities: Entity[] }
   screens: Screen[]
+  moodBoard: MoodBoardImage[]
   techStack: { frontend: string; backend: string; hosting: string }
   competitors: string
   designNotes: string
@@ -170,10 +193,11 @@ interface Props {
 type ConfidenceLevel = 'red' | 'yellow' | 'green'
 
 export default function PRDForm({ project, onProjectUpdate, onGenerateTasks, onImportFigma, apiKey, provider, model }: Props) {
-  // Ensure prd has ideas array (for backward compatibility)
+  // Ensure prd has ideas and moodBoard arrays (for backward compatibility)
   const initialPrd = {
     ...project.prd,
-    ideas: project.prd.ideas || []
+    ideas: project.prd.ideas || [],
+    moodBoard: project.prd.moodBoard || []
   }
   const [prd, setPrd] = useState<PRD>(initialPrd)
   const [expandedSection, setExpandedSection] = useState<string>('overview')
@@ -515,6 +539,41 @@ CRITICAL INSTRUCTIONS:
     updatePrd({ screens: prd.screens.filter(s => s.id !== id) })
   }
 
+  // Screen image handling
+  const handleScreenImageUpload = async (screenId: string, file: File) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = reader.result as string
+      updateScreen(screenId, { imagePath: dataUrl })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeScreenImage = (screenId: string) => {
+    updateScreen(screenId, { imagePath: undefined })
+  }
+
+  // Mood Board handling
+  const addMoodBoardImage = async (file: File) => {
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const newImage: MoodBoardImage = {
+        id: `mood-${Date.now()}`,
+        path: reader.result as string,
+        label: '',
+        createdAt: new Date().toISOString()
+      }
+      updatePrd({ moodBoard: [...(prd.moodBoard || []), newImage] })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const removeMoodBoardImage = (id: string) => {
+    updatePrd({ moodBoard: (prd.moodBoard || []).filter(img => img.id !== id) })
+  }
+
   // Add entity
   const addEntity = () => {
     const newEntity: Entity = {
@@ -815,20 +874,21 @@ If your app stores data, list what you're storing:
                 </div>
                 <div>
                   <label className="block text-sm text-[var(--text-secondary)] mb-2">Platform *</label>
-                  <div className="flex gap-2">
-                    {(['web', 'mobile', 'both'] as const).map(platform => (
+                  <div className="inline-flex rounded-lg border border-[var(--border-secondary)] overflow-hidden">
+                    {(['web', 'mobile', 'both'] as const).map((platform, idx) => (
                       <button
                         key={platform}
                         onClick={() => updatePrd({ overview: { ...prd.overview, platform } })}
-                        className={`flex-1 px-4 py-2.5 rounded-lg font-medium transition-all border ${
+                        className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
                           prd.overview.platform === platform
-                            ? 'bg-indigo-600 border-indigo-500 text-[var(--text-primary)]'
-                            : 'bg-[var(--bg-primary)] border-[var(--border-secondary)] text-[var(--text-secondary)] hover:border-slate-500'
-                        }`}
+                            ? 'bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                            : 'bg-[var(--bg-primary)] text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)]'
+                        } ${idx > 0 ? 'border-l border-[var(--border-secondary)]' : ''}`}
                       >
                         {platform === 'web' && <><IconMonitor size={14} /> Web</>}
                         {platform === 'mobile' && <><IconSmartphone size={14} /> Mobile</>}
-                        {platform === 'both' && <><IconRefreshCw size={14} /> Both</>}                      </button>
+                        {platform === 'both' && <><IconRefreshCw size={14} /> Both</>}
+                      </button>
                     ))}
                   </div>
                   <p className="text-xs text-[var(--text-tertiary)] mt-2">
@@ -951,6 +1011,9 @@ If your app stores data, list what you're storing:
             />
             {expandedSection === 'screens' && (
               <div className="mt-2 p-4 bg-[var(--bg-secondary)] rounded-lg space-y-3">
+                <p className="text-xs text-[var(--text-tertiary)] mb-2">
+                  Define each screen. Upload reference images to show the AI what you're envisioning.
+                </p>
                 {prd.screens.map((screen, idx) => (
                   <div key={screen.id} className="p-3 bg-[var(--bg-primary)] rounded-lg border border-[var(--border-primary)]">
                     <div className="flex items-center justify-between mb-2">
@@ -962,6 +1025,40 @@ If your app stores data, list what you're storing:
                         Remove
                       </button>
                     </div>
+                    
+                    {/* Image upload area */}
+                    <div className="mb-3">
+                      {screen.imagePath ? (
+                        <div className="relative group">
+                          <img
+                            src={screen.imagePath}
+                            alt={screen.name || 'Screen reference'}
+                            className="w-full h-32 object-cover rounded-lg border border-[var(--border-secondary)]"
+                          />
+                          <button
+                            onClick={() => removeScreenImage(screen.id)}
+                            className="absolute top-2 right-2 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <IconX size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-[var(--border-secondary)] rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-[var(--bg-secondary)] transition-colors">
+                          <IconUpload size={20} className="text-[var(--text-tertiary)] mb-1" />
+                          <span className="text-xs text-[var(--text-tertiary)]">Upload reference image</span>
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) handleScreenImageUpload(screen.id, file)
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    
                     <input
                       type="text"
                       value={screen.name}
@@ -983,6 +1080,69 @@ If your app stores data, list what you're storing:
                 >
                   + Add Screen
                 </button>
+              </div>
+            )}
+          </div>
+
+{/* Mood Board Section - NEW */}
+<div>
+            <SectionHeader 
+              id="moodBoard" 
+              title="Mood Board" 
+              icon={<IconPalette size={18} />} 
+              isComplete={(prd.moodBoard || []).length >= 1}
+            />
+            {expandedSection === 'moodBoard' && (
+              <div className="mt-2 p-4 bg-[var(--bg-secondary)] rounded-lg space-y-3">
+                <p className="text-xs text-[var(--text-tertiary)] mb-2">
+                  Upload images that show the visual style you want. The AI uses these as design references.
+                </p>
+                
+                <div className="grid grid-cols-3 gap-2">
+                  {(prd.moodBoard || []).map((img) => (
+                    <div key={img.id} className="relative group">
+                      <img
+                        src={img.path}
+                        alt={img.label || 'Mood board'}
+                        className="w-full h-20 object-cover rounded-lg"
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                        <button
+                          onClick={() => removeMoodBoardImage(img.id)}
+                          className="p-1 bg-red-500 rounded-full"
+                        >
+                          <IconX size={14} />
+                        </button>
+                      </div>
+                      {img.label && (
+                        <div className="absolute bottom-0 left-0 right-0 px-1 py-0.5 bg-black/70 text-[10px] text-white rounded-b-lg truncate">
+                          {img.label}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {/* Add button */}
+                  <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-[var(--border-secondary)] rounded-lg cursor-pointer hover:border-indigo-500 transition-colors">
+                    <IconUpload size={16} className="text-[var(--text-tertiary)]" />
+                    <span className="text-[10px] text-[var(--text-tertiary)] mt-1">Add</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) addMoodBoardImage(file)
+                      }}
+                    />
+                  </label>
+                </div>
+                
+                {(prd.moodBoard || []).length === 0 && (
+                  <p className="text-center text-xs text-[var(--text-tertiary)] py-2">
+                    Add images that inspire the visual style
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -1204,6 +1364,9 @@ If your app stores data, list what you're storing:
           </div>
           <div className={`flex items-center gap-2 text-[var(--text-tertiary)]`}>
             {prd.screens.length >= 1 ? '✓' : '○'} Screens (optional)
+          </div>
+          <div className={`flex items-center gap-2 text-[var(--text-tertiary)]`}>
+            {(prd.moodBoard || []).length >= 1 ? '✓' : '○'} Mood board (optional)
           </div>
         </div>
 
