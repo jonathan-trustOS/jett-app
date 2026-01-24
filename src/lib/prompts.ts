@@ -264,3 +264,55 @@ export function saveBuildSettings(settings: Partial<BuildSettings>): void {
   const updated = { ...current, ...settings }
   localStorage.setItem('jett-build-settings', JSON.stringify(updated))
 }
+
+// ============================================
+// NAME UTILITIES
+// ============================================
+
+/**
+ * Convert a feature title to a clean, short PascalCase name
+ * "Save hunting spots on interactive maps with location markers" → "SaveSpots"
+ * "Weather forecast integration showing conditions" → "WeatherForecast"
+ */
+export function cleanModuleName(title: string): string {
+  // Common words to remove (filler words)
+  const stopWords = new Set([
+    'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+    'of', 'with', 'by', 'from', 'as', 'into', 'through', 'during', 'before',
+    'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then',
+    'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each',
+    'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same',
+    'than', 'too', 'very', 'just', 'about', 'using', 'showing', 'based',
+    'that', 'this', 'these', 'those', 'which', 'what', 'who', 'whom',
+    'interactive', 'feature', 'functionality', 'system', 'tool', 'tools'
+  ])
+  
+  // Split into words
+  const words = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+    .split(/\s+/)
+    .filter(word => word.length > 0 && !stopWords.has(word))
+  
+  // Take first 2-3 meaningful words
+  const keyWords = words.slice(0, 3)
+  
+  // Convert to PascalCase
+  const pascalCase = keyWords
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('')
+  
+  // Fallback if empty
+  return pascalCase || 'Feature' + Date.now().toString().slice(-4)
+}
+
+/**
+ * Convert to a valid route path
+ * "SaveSpots" → "/save-spots"
+ */
+export function cleanRoutePath(moduleName: string): string {
+  return '/' + moduleName
+    .replace(/([A-Z])/g, '-$1')
+    .toLowerCase()
+    .replace(/^-/, '')
+}

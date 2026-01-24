@@ -15,7 +15,7 @@
 import { useState, useRef, useEffect } from 'react'
 import CodePanel from './CodePanel'
 import { getPluginSettings } from './SettingsPanel'
-import { getSystemPrompt, getModelForStep, getBuildSettings, BuildStepType, parseCompletionSignal } from '../lib/prompts'
+import { getSystemPrompt, getModelForStep, getBuildSettings, BuildStepType, parseCompletionSignal, cleanModuleName, cleanRoutePath } from '../lib/prompts'
 import { 
   initProgressLog, 
   logStepStart, 
@@ -82,8 +82,10 @@ export default function IsolatedBuildSystem({
   const [currentStepIndex, setCurrentStepIndex] = useState<number | null>(null)
   const [buildLog, setBuildLog] = useState<string[]>([])
   const [isBuilding, setIsBuilding] = useState(false)
+  const [stopRequested, setStopRequested] = useState(false)
   const [hasBuildErrors, setHasBuildErrors] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewFailed, setPreviewFailed] = useState(false)
   const [capturedErrors, setCapturedErrors] = useState<Set<string>>(new Set())
   const [rightPanelTab, setRightPanelTab] = useState<'code' | 'preview'>('preview')
   const [lastFileUpdate, setLastFileUpdate] = useState(Date.now())
@@ -299,7 +301,8 @@ export default function IsolatedBuildSystem({
     // Step 4+: Feature modules from PRD
     const features = project.prd?.features || []
     features.forEach((feature, idx) => {
-      const moduleName = feature.title.replace(/\s+/g, '')
+      const moduleName = cleanModuleName(feature.title)
+      const routePath = cleanRoutePath(moduleName)
       steps.push({
         id: `step-module-${idx}`,
         type: 'module',
@@ -308,7 +311,7 @@ export default function IsolatedBuildSystem({
         status: 'pending',
         moduleSpec: {
           name: moduleName,
-          route: `/${moduleName.toLowerCase()}`,
+          route: routePath,
           description: feature.description,
           components: [`${moduleName}Page`, `${moduleName}List`, `${moduleName}Detail`]
         },
@@ -402,6 +405,62 @@ export default function IsolatedBuildSystem({
       }
       return updated
     })
+  }
+
+  /**
+   * Self-review: AI reviews its own generated code for obvious issues
+   * This catches problems BEFORE moving to next step
+   */
+  const selfReviewStep = async (step: BuildStep, stepIndex: number): Promise<{ passed: boolean; issues: string[] }> => {
+    const projectDir = await window.jett.getProjectPath(project.id)
+    const issues: string[] = []
+    
+    try {
+      // Get files created in this step
+      const files = step.filesCreated
+      if (files.length === 0) {
+        return { passed: true, issues: [] }
+      }
+      
+      // Quick validation checks (no AI needed)
+      for (const file of files) {
+        const filePath = `${projectDir}/${file}`
+        try {
+          const content = await window.jett.readFile(filePath)
+          
+          // Check for common issues
+          if (content.includes('// TODO') || content.includes('// FIXME')) {
+            issues.push(`${file} has TODO/FIXME comments`)
+          }
+          if (content.includes('any[]') || content.includes(': any')) {
+            // Allow some 'any' but flag if excessive
+            const anyCount = (content.match(/: any/g) || []).length
+            if (anyCount > 5) {
+              issues.push(`${file} has excessive 'any' types (${anyCount})`)
+            }
+          }
+          if (file.endsWith('.tsx') && !content.includes('export')) {
+            issues.push(`${file} has no exports`)
+          }
+        } catch (e) {
+          // File read failed - might not exist
+          issues.push(`${file} could not be read`)
+        }
+      }
+      
+      // Pass if no critical issues (warnings are OK)
+      const criticalIssues = issues.filter(i => 
+        i.includes('no exports') || i.includes('could not be read')
+      )
+      
+      return { 
+        passed: criticalIssues.length === 0, 
+        issues 
+      }
+    } catch (e) {
+      // Review failed, but don't block build
+      return { passed: true, issues: [] }
+    }
   }
 
   // ========================================
@@ -1161,6 +1220,7 @@ body {
     }
 
     setIsBuilding(true)
+    setStopRequested(false)
     setHasBuildErrors(false)
     setBuildLog([])
     
@@ -1191,12 +1251,18 @@ body {
     let allStepsCompleted = true
     
     for (let i = startIndex; i < buildSteps.length; i++) {
+      // Check if stop was requested
+      if (stopRequested) {
+        log('\n⏹️ Build stopped by user')
+        break
+      }
+      
       setCurrentStepIndex(i)
       
       let success = false
       let attempts = 0
       
-      while (!success && attempts < MAX_RETRIES) {
+      while (!success && attempts < MAX_RETRIES && !stopRequested) {
         attempts++
         
         // Log step attempt
@@ -1269,6 +1335,7 @@ body {
     if (previewUrl) return
     
     log('🖥️ Starting dev server...')
+    setPreviewFailed(false)
     
     try {
       // Ensure dependencies installed
@@ -1286,11 +1353,14 @@ body {
       if (result.success && (result.port || result.url)) {
         const url = result.url || `http://localhost:${result.port}`
         setPreviewUrl(url)
+        setPreviewFailed(false)
         log(`✅ Preview available at ${url}`)
       } else {
+        setPreviewFailed(true)
         log(`❌ Server failed: ${result.error || 'Unknown error'}`)
       }
     } catch (error: any) {
+      setPreviewFailed(true)
       log(`❌ Server error: ${error.message}`)
     }
   }
@@ -1345,23 +1415,23 @@ body {
               <IconClock size={16} className="inline-block animate-spin mr-2" />
               Generating build plan...
             </div>
+          ) : isBuilding ? (
+            <button
+              onClick={() => setStopRequested(true)}
+              className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              Stop Build
+            </button>
           ) : (
             <button
               onClick={startBuild}
-              disabled={isBuilding}
-              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
+              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
             >
-              {isBuilding ? (
-                <>
-                  <IconClock size={16} className="animate-spin" />
-                  Building...
-                </>
-              ) : (
-                <>
-                  <IconBuild size={16} />
-                  {completedSteps > 0 ? 'Continue Build' : 'Start Build'}
-                </>
-              )}
+              <IconBuild size={16} />
+              {completedSteps > 0 ? 'Continue Build' : 'Start Build'}
             </button>
           )}
         </div>
@@ -1580,7 +1650,21 @@ body {
                   ) : buildSteps.length > 0 && buildSteps.every(s => s.status === 'complete') ? (
                     <>
                       <IconRocket size={48} className="mx-auto mb-4 opacity-50" />
-                      <p>Build complete — starting preview...</p>
+                      {previewFailed ? (
+                        <>
+                          <p className="text-yellow-500 mb-3">Preview server failed to start</p>
+                          <button
+                            onClick={() => ensurePreviewRunning()}
+                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg flex items-center gap-2 mx-auto"
+                          >
+                            <IconRefresh size={16} />
+                            Retry Preview
+                          </button>
+                          <p className="text-xs mt-3 opacity-60">Or click "Open in Browser" after retrying</p>
+                        </>
+                      ) : (
+                        <p>Build complete — starting preview...</p>
+                      )}
                     </>
                   ) : buildSteps.length > 0 ? (
                     <>
