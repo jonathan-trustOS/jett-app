@@ -13,6 +13,7 @@ import { app } from 'electron'
 const HOME = app.getPath('home')
 
 const ALLOWED_PATHS = [
+  path.join(HOME, 'Documents', 'jett-projects'),
   path.join(HOME, 'Documents', 'Jett'),
   path.join(HOME, '.config', 'jett'),
   // Also allow the app's userData directory

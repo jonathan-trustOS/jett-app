@@ -741,6 +741,8 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
     // Count items being pushed
     const totalItems = getTotalCaptures(idea)
     
+    console.log('handlePromote called:', { totalItems, hasOnPushCapture: !!onPushCapture, currentProject: currentProject?.name })
+    
     // If we're inside a project (onPushCapture exists), add to current project
     if (onPushCapture && currentProject) {
       console.log(`📋 Pushing ${totalItems} captures to ${currentProject.name}...`)
@@ -748,9 +750,8 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
       // Push each capture to the current project's PRD
       Object.entries(idea.prdCaptures).forEach(([section, captures]) => {
         (captures as PRDCapture[]).forEach(capture => {
-          if (!capture.pushed) {
-            onPushCapture(section, capture.content)
-          }
+          // Push all captures, even if previously marked as pushed
+          onPushCapture(section, capture.content)
         })
       })
       

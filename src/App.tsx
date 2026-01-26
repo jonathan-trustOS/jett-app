@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect, createContext, useContext, useRef } from 'react'
 import { TermsOfService } from './components/legal/TermsOfService';
 import ProjectList from './components/ProjectList'
 import PRDForm from './components/PRDForm'
@@ -366,71 +366,90 @@ function MainApp() {
   }
 
   // Push capture to current project's PRD
+  // Accumulator for batch push operations
+  const pendingPrdUpdates = useRef<{section: string, content: string}[]>([])
+  const pushTimeout = useRef<NodeJS.Timeout | null>(null)
+
   const handlePushCapture = (section: string, content: string) => {
     if (!currentProject) return
 
-    const updatedPrd = { ...currentProject.prd }
-    
-    switch (section) {
-      case 'overview':
-        updatedPrd.overview = {
-          ...updatedPrd.overview,
-          description: updatedPrd.overview.description 
-            ? `${updatedPrd.overview.description}\n${content}`
-            : content
-        }
-        break
-      case 'features':
-        updatedPrd.features = [
-          ...updatedPrd.features,
-          {
-            id: `feature-${Date.now()}`,
-            title: content.split(':')[0] || content,
-            description: content,
-            priority: 'must-have'
-          }
-        ]
-        break
-      case 'users':
-        updatedPrd.targetUsers = {
-          ...updatedPrd.targetUsers,
-          primaryUser: updatedPrd.targetUsers.primaryUser
-            ? `${updatedPrd.targetUsers.primaryUser}, ${content}`
-            : content
-        }
-        break
-      case 'screens':
-        updatedPrd.screens = [
-          ...updatedPrd.screens,
-          {
-            id: `screen-${Date.now()}`,
-            name: content.split(':')[0] || content,
-            description: content
-          }
-        ]
-        break
-      case 'data':
-        updatedPrd.dataModel = {
-          needsDatabase: true,
-          entities: [
-            ...updatedPrd.dataModel.entities,
-            {
-              id: `entity-${Date.now()}`,
-              name: content.split(':')[0] || content,
-              fields: ''
-            }
-          ]
-        }
-        break
-      case 'design':
-        updatedPrd.designNotes = updatedPrd.designNotes
-          ? `${updatedPrd.designNotes}\n${content}`
-          : content
-        break
-    }
+    // Accumulate updates
+    pendingPrdUpdates.current.push({ section, content })
 
-    const updatedProject = { ...currentProject, prd: updatedPrd }
-    handleProjectUpdate(updatedProject)
+    // Debounce: apply all updates after 100ms of no new pushes
+    if (pushTimeout.current) clearTimeout(pushTimeout.current)
+    pushTimeout.current = setTimeout(() => {
+      const updates = pendingPrdUpdates.current
+      pendingPrdUpdates.current = []
+
+      if (updates.length === 0) return
+
+      const updatedPrd = { ...currentProject.prd }
+
+      updates.forEach(({ section, content }) => {
+        switch (section) {
+          case 'overview':
+            updatedPrd.overview = {
+              ...updatedPrd.overview,
+              description: updatedPrd.overview.description 
+                ? `${updatedPrd.overview.description}\n${content}`
+                : content
+            }
+            break
+          case 'features':
+            updatedPrd.features = [
+              ...updatedPrd.features,
+              {
+                id: `feature-${Date.now()}-${Math.random()}`,
+                title: content.split(':')[0] || content,
+                description: content,
+                priority: 'must-have'
+              }
+            ]
+            break
+          case 'users':
+            updatedPrd.targetUsers = {
+              ...updatedPrd.targetUsers,
+              primaryUser: updatedPrd.targetUsers.primaryUser
+                ? `${updatedPrd.targetUsers.primaryUser}, ${content}`
+                : content
+            }
+            break
+          case 'screens':
+            updatedPrd.screens = [
+              ...updatedPrd.screens,
+              {
+                id: `screen-${Date.now()}-${Math.random()}`,
+                name: content.split(':')[0] || content,
+                description: content
+              }
+            ]
+            break
+          case 'data':
+            updatedPrd.dataModel = {
+              needsDatabase: true,
+              entities: [
+                ...updatedPrd.dataModel.entities,
+                {
+                  id: `entity-${Date.now()}-${Math.random()}`,
+                  name: content.split(':')[0] || content,
+                  fields: ''
+                }
+              ]
+            }
+            break
+          case 'design':
+            updatedPrd.designNotes = updatedPrd.designNotes
+              ? `${updatedPrd.designNotes}\n${content}`
+              : content
+            break
+        }
+      })
+
+      const updatedProject = { ...currentProject, prd: updatedPrd }
+      handleProjectUpdate(updatedProject)
+      console.log(`✅ Batched ${updates.length} PRD updates`)
+    }, 100)
   }
 
   const handleCreateProject = async (name: string, templatePrd?: any) => {

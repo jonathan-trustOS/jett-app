@@ -146,15 +146,15 @@ export async function runTest(
     await page.goto(finalConfig.baseUrl, { waitUntil: 'networkidle' })
     logs.push(`Navigated to ${finalConfig.baseUrl}`)
 
-    // Execute the test code
-    // We wrap it in an async IIFE to support await
-    const wrappedTest = `
-      (async () => {
+    // Execute the test code in Node context with page available
+    // Using Function constructor to run Playwright commands
+    const testFunction = new Function('page', `
+      return (async () => {
         ${testCode}
       })()
-    `
-
-    await page.evaluate(wrappedTest)
+    `)
+    
+    await testFunction(page)
     logs.push('Test completed successfully')
 
     return {

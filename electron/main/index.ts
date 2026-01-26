@@ -348,8 +348,10 @@ ipcMain.handle('fs:write-file', async (_event, projectId: string, filePath: stri
     const fullPath = path.join(projectDir, filePath)
     // v1.5.0: Security - validate path
     if (!validatePath(fullPath)) {
-      return { success: false, error: 'Access denied: Path not allowed' }
+      console.error('PATH VALIDATION FAILED:', fullPath)
+      return { success: false, error: `Access denied: Path not allowed - ${fullPath}` }
     }
+    console.log('Writing file:', fullPath)
     const dir = path.dirname(fullPath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(fullPath, content, 'utf-8')
