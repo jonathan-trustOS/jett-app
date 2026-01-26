@@ -1,6 +1,8 @@
 /**
  * Jett Settings Panel
  * Full settings with API config, model selection, and plugin toggles
+ * 
+ * v1.4.0 - Added integrations: OpenAI, Stripe, Google Maps, SendGrid
  */
 
 import { useState, useEffect } from 'react'
@@ -93,6 +95,31 @@ export default function SettingsPanel({
   const [convexUrl, setConvexUrl] = useState('')
   const [showConvexKey, setShowConvexKey] = useState(false)
   const [convexSaveStatus, setConvexSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // ============================================
+  // NEW INTEGRATIONS STATE
+  // ============================================
+  
+  // OpenAI state (for AI features in generated apps)
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false)
+  const [openaiSaveStatus, setOpenaiSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // Stripe state (for payments)
+  const [stripePublishableKey, setStripePublishableKey] = useState('')
+  const [stripeSecretKey, setStripeSecretKey] = useState('')
+  const [showStripeKey, setShowStripeKey] = useState(false)
+  const [stripeSaveStatus, setStripeSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // Google Maps state (for location features)
+  const [googleMapsKey, setGoogleMapsKey] = useState('')
+  const [showGoogleMapsKey, setShowGoogleMapsKey] = useState(false)
+  const [googleMapsSaveStatus, setGoogleMapsSaveStatus] = useState<'idle' | 'saved'>('idle')
+
+  // SendGrid state (for email)
+  const [sendgridKey, setSendgridKey] = useState('')
+  const [showSendgridKey, setShowSendgridKey] = useState(false)
+  const [sendgridSaveStatus, setSendgridSaveStatus] = useState<'idle' | 'saved'>('idle')
   
   // GitHub state
   const [githubAuth, setGithubAuth] = useState<GitHubAuth | null>(null)
@@ -190,9 +217,37 @@ export default function SettingsPanel({
       setVercelToken(savedVercelToken)
     }
 
+    // Load Supabase credentials
+    const savedSupabaseUrl = localStorage.getItem('supabase_url')
+    const savedSupabaseAnonKey = localStorage.getItem('supabase_anon_key')
+    if (savedSupabaseUrl) setSupabaseUrl(savedSupabaseUrl)
+    if (savedSupabaseAnonKey) setSupabaseAnonKey(savedSupabaseAnonKey)
+
     // Load Convex credentials
     const savedConvexUrl = localStorage.getItem('convex_url')
     if (savedConvexUrl) setConvexUrl(savedConvexUrl)
+
+    // ============================================
+    // LOAD NEW INTEGRATIONS
+    // ============================================
+    
+    // Load OpenAI
+    const savedOpenaiKey = localStorage.getItem('openai_api_key')
+    if (savedOpenaiKey) setOpenaiKey(savedOpenaiKey)
+
+    // Load Stripe
+    const savedStripePublishable = localStorage.getItem('stripe_publishable_key')
+    const savedStripeSecret = localStorage.getItem('stripe_secret_key')
+    if (savedStripePublishable) setStripePublishableKey(savedStripePublishable)
+    if (savedStripeSecret) setStripeSecretKey(savedStripeSecret)
+
+    // Load Google Maps
+    const savedGoogleMapsKey = localStorage.getItem('google_maps_api_key')
+    if (savedGoogleMapsKey) setGoogleMapsKey(savedGoogleMapsKey)
+
+    // Load SendGrid
+    const savedSendgridKey = localStorage.getItem('sendgrid_api_key')
+    if (savedSendgridKey) setSendgridKey(savedSendgridKey)
     
     // Load last update check info
     const savedUpdateInfo = localStorage.getItem('jett-update-info')
@@ -322,6 +377,55 @@ export default function SettingsPanel({
     setTimeout(() => {
       setShowToast(false)
     }, 3000)
+  }
+
+  // ============================================
+  // NEW INTEGRATIONS SAVE FUNCTIONS
+  // ============================================
+
+  const saveOpenai = () => {
+    localStorage.setItem('openai_api_key', openaiKey)
+    
+    setOpenaiSaveStatus('saved')
+    setToastMessage('OpenAI API key saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => setOpenaiSaveStatus('idle'), 2000)
+    setTimeout(() => setShowToast(false), 3000)
+  }
+
+  const saveStripe = () => {
+    localStorage.setItem('stripe_publishable_key', stripePublishableKey)
+    localStorage.setItem('stripe_secret_key', stripeSecretKey)
+    
+    setStripeSaveStatus('saved')
+    setToastMessage('Stripe keys saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => setStripeSaveStatus('idle'), 2000)
+    setTimeout(() => setShowToast(false), 3000)
+  }
+
+  const saveGoogleMaps = () => {
+    localStorage.setItem('google_maps_api_key', googleMapsKey)
+    
+    setGoogleMapsSaveStatus('saved')
+    setToastMessage('Google Maps API key saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => setGoogleMapsSaveStatus('idle'), 2000)
+    setTimeout(() => setShowToast(false), 3000)
+  }
+
+  const saveSendgrid = () => {
+    localStorage.setItem('sendgrid_api_key', sendgridKey)
+    
+    setSendgridSaveStatus('saved')
+    setToastMessage('SendGrid API key saved successfully')
+    setShowToast(true)
+    
+    setTimeout(() => setSendgridSaveStatus('idle'), 2000)
+    setTimeout(() => setShowToast(false), 3000)
   }
 
   const handleProviderChange = (newProvider: string) => {
@@ -661,8 +765,8 @@ export default function SettingsPanel({
                 </p>
               </div>
 
-{/* Supabase Credentials */}
-<div>
+              {/* Supabase Credentials */}
+              <div>
                 <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                   Supabase <span className="text-xs text-[var(--text-tertiary)]">(for database)</span>
                 </label>
@@ -774,6 +878,248 @@ export default function SettingsPanel({
                   >
                     {convexSaveStatus === 'saved' ? '✓ Saved' : 'Save Convex URL'}
                   </button>
+                </div>
+              </div>
+
+              {/* ============================================ */}
+              {/* NEW INTEGRATIONS SECTION */}
+              {/* ============================================ */}
+              
+              <div className="pt-4 border-t border-[var(--border-primary)]">
+                <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">App Integrations</h3>
+                <p className="text-xs text-[var(--text-tertiary)] mb-4">
+                  Configure these to enable AI to add features to generated apps.
+                </p>
+
+                {/* OpenAI */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    OpenAI <span className="text-xs text-[var(--text-tertiary)]">(for AI features in apps)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type={showOpenaiKey ? 'text' : 'password'}
+                        value={openaiKey}
+                        onChange={(e) => setOpenaiKey(e.target.value)}
+                        placeholder="sk-..."
+                        className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        {showOpenaiKey ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={saveOpenai}
+                      className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                        openaiSaveStatus === 'saved' 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      {openaiSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                    </button>
+                    {openaiKey && (
+                      <button
+                        onClick={() => {
+                          setOpenaiKey('')
+                          localStorage.removeItem('openai_api_key')
+                          setOpenaiSaveStatus('idle')
+                        }}
+                        className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                        title="Clear OpenAI Key"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                    <button 
+                      onClick={() => window.jett?.openExternal?.('https://platform.openai.com/api-keys')}
+                      className="text-blue-400 hover:underline"
+                    >
+                      platform.openai.com/api-keys
+                    </button>
+                  </p>
+                </div>
+
+                {/* Stripe */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    Stripe <span className="text-xs text-[var(--text-tertiary)]">(for payments)</span>
+                  </label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={stripePublishableKey}
+                      onChange={(e) => setStripePublishableKey(e.target.value)}
+                      placeholder="pk_live_... or pk_test_..."
+                      className="flex-1 px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type={showStripeKey ? 'text' : 'password'}
+                        value={stripeSecretKey}
+                        onChange={(e) => setStripeSecretKey(e.target.value)}
+                        placeholder="sk_live_... or sk_test_..."
+                        className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowStripeKey(!showStripeKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        {showStripeKey ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={saveStripe}
+                      className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                        stripeSaveStatus === 'saved' 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      {stripeSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                    </button>
+                    {(stripePublishableKey || stripeSecretKey) && (
+                      <button
+                        onClick={() => {
+                          setStripePublishableKey('')
+                          setStripeSecretKey('')
+                          localStorage.removeItem('stripe_publishable_key')
+                          localStorage.removeItem('stripe_secret_key')
+                          setStripeSaveStatus('idle')
+                        }}
+                        className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                        title="Clear Stripe Keys"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                    <button 
+                      onClick={() => window.jett?.openExternal?.('https://dashboard.stripe.com/apikeys')}
+                      className="text-blue-400 hover:underline"
+                    >
+                      dashboard.stripe.com/apikeys
+                    </button>
+                  </p>
+                </div>
+
+                {/* Google Maps */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    Google Maps <span className="text-xs text-[var(--text-tertiary)]">(for location features)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type={showGoogleMapsKey ? 'text' : 'password'}
+                        value={googleMapsKey}
+                        onChange={(e) => setGoogleMapsKey(e.target.value)}
+                        placeholder="AIza..."
+                        className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowGoogleMapsKey(!showGoogleMapsKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        {showGoogleMapsKey ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={saveGoogleMaps}
+                      className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                        googleMapsSaveStatus === 'saved' 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      {googleMapsSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                    </button>
+                    {googleMapsKey && (
+                      <button
+                        onClick={() => {
+                          setGoogleMapsKey('')
+                          localStorage.removeItem('google_maps_api_key')
+                          setGoogleMapsSaveStatus('idle')
+                        }}
+                        className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                        title="Clear Google Maps Key"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                    <button 
+                      onClick={() => window.jett?.openExternal?.('https://console.cloud.google.com/apis/credentials')}
+                      className="text-blue-400 hover:underline"
+                    >
+                      console.cloud.google.com/apis/credentials
+                    </button>
+                  </p>
+                </div>
+
+                {/* SendGrid */}
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    SendGrid <span className="text-xs text-[var(--text-tertiary)]">(for email)</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type={showSendgridKey ? 'text' : 'password'}
+                        value={sendgridKey}
+                        onChange={(e) => setSendgridKey(e.target.value)}
+                        placeholder="SG...."
+                        className="w-full px-3 py-2 bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-lg text-[var(--text-primary)] placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
+                      />
+                      <button
+                        onClick={() => setShowSendgridKey(!showSendgridKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      >
+                        {showSendgridKey ? '👁️' : '👁️‍🗨️'}
+                      </button>
+                    </div>
+                    <button
+                      onClick={saveSendgrid}
+                      className={`px-4 py-2 rounded-lg transition-all duration-200 min-w-[80px] ${
+                        sendgridSaveStatus === 'saved' 
+                          ? 'bg-emerald-500 text-white' 
+                          : 'bg-blue-500 text-white hover:bg-blue-400'
+                      }`}
+                    >
+                      {sendgridSaveStatus === 'saved' ? '✓ Saved' : 'Save'}
+                    </button>
+                    {sendgridKey && (
+                      <button
+                        onClick={() => {
+                          setSendgridKey('')
+                          localStorage.removeItem('sendgrid_api_key')
+                          setSendgridSaveStatus('idle')
+                        }}
+                        className="px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-secondary)] hover:text-[var(--error)] hover:bg-[var(--error)]/10 transition-all"
+                        title="Clear SendGrid Key"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">
+                    <button 
+                      onClick={() => window.jett?.openExternal?.('https://app.sendgrid.com/settings/api_keys')}
+                      className="text-blue-400 hover:underline"
+                    >
+                      app.sendgrid.com/settings/api_keys
+                    </button>
+                  </p>
                 </div>
               </div>
 

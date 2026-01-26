@@ -24,6 +24,7 @@ import {
   writeProgressLog 
 } from '../lib/progressLog'
 import { IconBuild, IconCheck, IconClock, IconCode, IconDocument, IconRocket, IconRefresh } from './Icons'
+import { usePlaywrightTest } from '../hooks/usePlaywrightTest'
 
 // Build step types
 type BuildStepType = 'contracts' | 'shell' | 'shared' | 'module' | 'integration'
@@ -97,6 +98,9 @@ export default function IsolatedBuildSystem({
   const [stepEstimate, setStepEstimate] = useState<number>(0)
   const [stepRemaining, setStepRemaining] = useState<number>(0)
 
+  // Self-healing: code context for retry attempts
+  const [retryContext, setRetryContext] = useState<{ code: string; error?: string } | null>(null)
+
   // Total build time tracking
   const [totalBuildStart, setTotalBuildStart] = useState<number | null>(null)
   const [totalElapsed, setTotalElapsed] = useState<number>(0)
@@ -107,6 +111,10 @@ export default function IsolatedBuildSystem({
     total: number
     name: string
   } | null>(null)
+
+  // v1.5.0: Playwright testing
+  const { isRunning: isTestRunning, lastResult: testResult, runSmokeTest } = usePlaywrightTest()
+  const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'passed' | 'failed'>('idle')
 
   // Get step timing history from localStorage
   const getStepHistory = (stepType: string): number[] => {
@@ -262,76 +270,144 @@ export default function IsolatedBuildSystem({
     }
   }, [previewUrl, onRuntimeError, capturedErrors])
 
-  // Generate build steps from PRD
+  // Generate build steps from PRD (supports incremental builds)
   const generateBuildPlan = async () => {
-    log('📋 Generating build plan from PRD...')
+    log('📋 Analyzing build plan...')
     
-    const steps: BuildStep[] = []
-    
-    // Step 1: Contracts (always first)
-    steps.push({
-      id: 'step-contracts',
-      type: 'contracts',
-      name: 'Type Contracts',
-      description: 'Generate shared types from PRD data model',
-      status: 'pending',
-      filesCreated: []
-    })
-    
-    // Step 2: Shell (always second)
-    steps.push({
-      id: 'step-shell',
-      type: 'shell',
-      name: 'App Shell',
-      description: 'Create routing structure and config files',
-      status: 'pending',
-      filesCreated: []
-    })
-    
-    // Step 3: Shared UI (always third)
-    steps.push({
-      id: 'step-shared',
-      type: 'shared',
-      name: 'Shared UI',
-      description: 'Build reusable UI components (Button, Card, Modal, Input)',
-      status: 'pending',
-      filesCreated: []
-    })
-    
-    // Step 4+: Feature modules from PRD
+    const existingSteps = buildSteps || []
     const features = project.prd?.features || []
-    features.forEach((feature, idx) => {
-      const moduleName = cleanModuleName(feature.title)
-      const routePath = cleanRoutePath(moduleName)
+    
+    // Get existing module step names to detect what's already planned
+    const existingModuleNames = new Set(
+      existingSteps
+        .filter(s => s.type === 'module')
+        .map(s => s.name)
+    )
+    
+    // Find new features not yet in build plan
+    const newFeatures = features.filter(f => !existingModuleNames.has(f.title))
+    
+    // If no existing steps, generate fresh plan
+    if (existingSteps.length === 0) {
+      log('📋 Generating fresh build plan...')
+      const steps: BuildStep[] = []
+      
+      // Step 1: Contracts
       steps.push({
-        id: `step-module-${idx}`,
-        type: 'module',
-        name: feature.title,
-        description: feature.description,
+        id: 'step-contracts',
+        type: 'contracts',
+        name: 'Type Contracts',
+        description: 'Generate shared types from PRD data model',
         status: 'pending',
-        moduleSpec: {
-          name: moduleName,
-          route: routePath,
-          description: feature.description,
-          components: [`${moduleName}Page`, `${moduleName}List`, `${moduleName}Detail`]
-        },
         filesCreated: []
       })
-    })
+      
+      // Step 2: Shell
+      steps.push({
+        id: 'step-shell',
+        type: 'shell',
+        name: 'App Shell',
+        description: 'Create routing structure and config files',
+        status: 'pending',
+        filesCreated: []
+      })
+      
+      // Step 3: Shared UI
+      steps.push({
+        id: 'step-shared',
+        type: 'shared',
+        name: 'Shared UI',
+        description: 'Build reusable UI components (Button, Card, Modal, Input)',
+        status: 'pending',
+        filesCreated: []
+      })
+      
+      // Step 4+: All feature modules
+      features.forEach((feature, idx) => {
+        const moduleName = cleanModuleName(feature.title)
+        const routePath = cleanRoutePath(moduleName)
+        steps.push({
+          id: `step-module-${idx}`,
+          type: 'module',
+          name: feature.title,
+          description: feature.description,
+          status: 'pending',
+          moduleSpec: {
+            name: moduleName,
+            route: routePath,
+            description: feature.description,
+            components: [`${moduleName}Page`, `${moduleName}List`, `${moduleName}Detail`]
+          },
+          filesCreated: []
+        })
+      })
+      
+      // Final step: Integration
+      steps.push({
+        id: 'step-integration',
+        type: 'integration',
+        name: 'Integration',
+        description: 'Wire up modules, test full app',
+        status: 'pending',
+        filesCreated: []
+      })
+      
+      setBuildSteps(steps)
+      onProjectUpdate({ ...project, buildSteps: steps })
+      log(`✅ Generated ${steps.length} build steps`)
+      return
+    }
     
-    // Final step: Integration
-    steps.push({
-      id: 'step-integration',
-      type: 'integration',
-      name: 'Integration',
-      description: 'Wire up modules, test full app',
-      status: 'pending',
-      filesCreated: []
-    })
+    // Incremental: Add new features to existing plan
+    if (newFeatures.length > 0) {
+      log(`📋 Found ${newFeatures.length} new feature(s) to add...`)
+      
+      // Find where to insert (before integration step)
+      const integrationIndex = existingSteps.findIndex(s => s.type === 'integration')
+      const insertIndex = integrationIndex !== -1 ? integrationIndex : existingSteps.length
+      
+      // Create new module steps
+      const newModuleSteps: BuildStep[] = newFeatures.map((feature, idx) => {
+        const moduleName = cleanModuleName(feature.title)
+        const routePath = cleanRoutePath(moduleName)
+        return {
+          id: `step-module-${Date.now()}-${idx}`,
+          type: 'module' as BuildStepType,
+          name: feature.title,
+          description: feature.description,
+          status: 'pending' as const,
+          moduleSpec: {
+            name: moduleName,
+            route: routePath,
+            description: feature.description,
+            components: [`${moduleName}Page`, `${moduleName}List`, `${moduleName}Detail`]
+          },
+          filesCreated: []
+        }
+      })
+      
+      // Insert new steps before integration
+      const updatedSteps = [
+        ...existingSteps.slice(0, insertIndex),
+        ...newModuleSteps,
+        ...existingSteps.slice(insertIndex)
+      ]
+      
+      // Reset integration step to pending (needs to re-run with new modules)
+      const finalSteps = updatedSteps.map(s => 
+        s.type === 'integration' ? { ...s, status: 'pending' as const } : s
+      )
+      
+      setBuildSteps(finalSteps)
+      onProjectUpdate({ ...project, buildSteps: finalSteps })
+      log(`✅ Added ${newFeatures.length} new module(s) - ready to build`)
+      
+      newFeatures.forEach(f => log(`  + ${f.title}`))
+      return
+    }
     
-    setBuildSteps(steps)
-    onProjectUpdate({ ...project, buildSteps: steps })
-    log(`✅ Generated ${steps.length} build steps`)
+    // No changes needed
+    log('✅ Build plan is up to date')
   }
 
   // Auto-generate build plan when arriving from PRD with status='building'
@@ -396,6 +472,63 @@ export default function IsolatedBuildSystem({
     })
   }
 
+  /**
+   * Read all generated project files for AI context (self-healing)
+   */
+  const readAllProjectFiles = async (): Promise<string> => {
+    try {
+      const result = await window.jett.listFiles(project.id)
+      if (!result.success) return ''
+      
+      const codeFiles = result.files.filter((f: string) => 
+        (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) &&
+        !f.includes('node_modules')
+      )
+      
+      const fileContents: string[] = []
+      for (const file of codeFiles.slice(0, 15)) {
+        try {
+          const readResult = await window.jett.readFile(project.id, file)
+          if (readResult.success && readResult.content.length < 8000) {
+            fileContents.push(`// === ${file} ===\n${readResult.content}`)
+          }
+        } catch (e) { /* skip */ }
+      }
+      
+      return fileContents.join('\n\n')
+    } catch (e) {
+      return ''
+    }
+  }
+
+  /**
+   * Apply patches from AI response
+   * Format: ---PATCH path="filepath"---\nOLD:\n```\nold code\n```\nNEW:\n```\nnew code\n```\n---END-PATCH---
+   */
+  const applyPatches = async (response: string): Promise<{ applied: number; failed: number }> => {
+    const patchRegex = /---PATCH path="([^"]+)"---\s*\nOLD:\s*\n```[^\n]*\n([\s\S]*?)\n```\s*\nNEW:\s*\n```[^\n]*\n([\s\S]*?)\n```\s*\n---END-PATCH---/g
+    
+    let applied = 0
+    let failed = 0
+    let match
+    
+    while ((match = patchRegex.exec(response)) !== null) {
+      const [, filePath, oldStr, newStr] = match
+      log(`  🔧 Patching: ${filePath}`)
+      
+      const result = await window.jett.patchFile(project.id, filePath, oldStr.trim(), newStr.trim())
+      if (result.success) {
+        applied++
+        log(`    ✅ Patch applied`)
+      } else {
+        failed++
+        log(`    ❌ Failed: ${result.error}`)
+      }
+    }
+    
+    return { applied, failed }
+  }
+
   const addFilesToStep = (index: number, files: string[]) => {
     setBuildSteps(prev => {
       const updated = [...prev]
@@ -408,11 +541,12 @@ export default function IsolatedBuildSystem({
   }
 
   /**
-   * Self-review: AI reviews its own generated code for obvious issues
+   * Self-review: AI reviews its own generated code for issues
    * This catches problems BEFORE moving to next step
+   * Phase 1: Quick static checks
+   * Phase 2: AI review (if static checks pass)
    */
-  const selfReviewStep = async (step: BuildStep, stepIndex: number): Promise<{ passed: boolean; issues: string[] }> => {
-    const projectDir = await window.jett.getProjectPath(project.id)
+  const selfReviewStep = async (step: BuildStep, stepIndex: number): Promise<{ passed: boolean; issues: string[]; fixes?: string[] }> => {
     const issues: string[] = []
     
     try {
@@ -422,18 +556,25 @@ export default function IsolatedBuildSystem({
         return { passed: true, issues: [] }
       }
       
-      // Quick validation checks (no AI needed)
+      // Phase 1: Quick static checks (no AI needed)
+      log(`  🔍 Self-review: checking ${files.length} files...`)
+      const fileContents: Record<string, string> = {}
+      
       for (const file of files) {
-        const filePath = `${projectDir}/${file}`
         try {
-          const content = await window.jett.readFile(filePath)
+          const result = await window.jett.readFile(project.id, file)
+          if (!result.success) {
+            issues.push(`${file} could not be read`)
+            continue
+          }
+          fileContents[file] = result.content
+          const content = result.content
           
           // Check for common issues
           if (content.includes('// TODO') || content.includes('// FIXME')) {
             issues.push(`${file} has TODO/FIXME comments`)
           }
           if (content.includes('any[]') || content.includes(': any')) {
-            // Allow some 'any' but flag if excessive
             const anyCount = (content.match(/: any/g) || []).length
             if (anyCount > 5) {
               issues.push(`${file} has excessive 'any' types (${anyCount})`)
@@ -442,23 +583,123 @@ export default function IsolatedBuildSystem({
           if (file.endsWith('.tsx') && !content.includes('export')) {
             issues.push(`${file} has no exports`)
           }
+          // Check for missing imports
+          if (content.includes('useState') && !content.includes("from 'react'") && !content.includes('from "react"')) {
+            issues.push(`${file} uses useState but missing React import`)
+          }
         } catch (e) {
-          // File read failed - might not exist
           issues.push(`${file} could not be read`)
         }
       }
       
-      // Pass if no critical issues (warnings are OK)
+      // Critical issues that should fail immediately
       const criticalIssues = issues.filter(i => 
-        i.includes('no exports') || i.includes('could not be read')
+        i.includes('no exports') || i.includes('could not be read') || i.includes('missing React import')
       )
       
-      return { 
-        passed: criticalIssues.length === 0, 
-        issues 
+      if (criticalIssues.length > 0) {
+        return { passed: false, issues }
       }
+      
+      // Phase 2: AI review for module steps (optional, can be disabled)
+      if (step.type === 'module' && Object.keys(fileContents).length > 0) {
+        const aiReview = await aiSelfReview(fileContents, step.moduleSpec!)
+        if (!aiReview.passed) {
+          issues.push(...aiReview.issues)
+          return { passed: false, issues, fixes: aiReview.fixes }
+        }
+      }
+      
+      if (issues.length > 0) {
+        log(`  ⚠️ Self-review found ${issues.length} warnings (non-blocking)`)
+      } else {
+        log(`  ✅ Self-review passed`)
+      }
+      
+      return { passed: true, issues }
     } catch (e) {
       // Review failed, but don't block build
+      return { passed: true, issues: [] }
+    }
+  }
+
+  /**
+   * AI Self-Review: Ask AI to review its own generated code
+   * Uses Haiku for fast, cheap review
+   */
+  const aiSelfReview = async (
+    fileContents: Record<string, string>, 
+    spec: ModuleSpec
+  ): Promise<{ passed: boolean; issues: string[]; fixes?: string[] }> => {
+    // Skip AI review if no API key
+    if (!apiKey) {
+      return { passed: true, issues: [] }
+    }
+    
+    const filesContext = Object.entries(fileContents)
+      .map(([path, content]) => `--- ${path} ---\n${content}`)
+      .join('\n\n')
+    
+    const prompt = `Review this code I just generated for the "${spec.name}" module.
+
+FILES:
+${filesContext}
+
+CHECK FOR:
+1. Missing imports (useState, useEffect, router hooks)
+2. Undefined variables or functions
+3. Type mismatches
+4. Components without proper exports
+5. Broken import paths
+
+RESPOND IN THIS EXACT FORMAT:
+PASSED: true/false
+ISSUES: (one per line, or "none")
+- issue 1
+- issue 2
+
+If PASSED is false, the code has critical issues that will cause errors.
+Be strict - if there's any import that doesn't exist or undefined reference, fail it.`
+
+    try {
+      // Use Haiku for fast, cheap review
+      const reviewProvider = provider === 'openrouter' ? 'openrouter' : 'anthropic'
+      const reviewModel = provider === 'openrouter' ? 'anthropic/claude-haiku-4.5' : 'claude-haiku-4-5-20251001'
+      
+      const result = await window.jett.claudeApi(
+        apiKey,
+        JSON.stringify([{ role: 'user', content: prompt }]),
+        undefined,
+        reviewProvider,
+        reviewModel
+      )
+      
+      if (!result.success) {
+        log(`  ⚠️ AI review failed: ${result.error}`)
+        return { passed: true, issues: [] }
+      }
+      
+      const response = result.text
+      
+      // Parse response
+      const passedMatch = response.match(/PASSED:\s*(true|false)/i)
+      const passed = passedMatch ? passedMatch[1].toLowerCase() === 'true' : true
+      
+      const issuesMatch = response.match(/ISSUES:([\s\S]*?)(?:$|FIXES:)/i)
+      const issues: string[] = []
+      
+      if (issuesMatch && !issuesMatch[1].includes('none')) {
+        const issueLines = issuesMatch[1].split('\n').filter((l: string) => l.trim().startsWith('-'))
+        issues.push(...issueLines.map((l: string) => l.replace(/^-\s*/, '').trim()))
+      }
+      
+      if (!passed) {
+        log(`  ❌ AI review failed: ${issues.join(', ')}`)
+      }
+      
+      return { passed, issues }
+    } catch (e) {
+      // AI review failed, don't block
       return { passed: true, issues: [] }
     }
   }
@@ -700,9 +941,24 @@ code
     setStepStartTime(Date.now())
     setStepEstimate(25)
     setStepRemaining(25)
-    log(`  → Sub-task 1/${totalSubTasks}: index.tsx`)
-    const pageSuccess = await buildModulePage(spec, typesContent, sharedUIContent, stepIndex)
+    // Sub-task 1: Main page (with retry)
+    let pageSuccess = false
+    let pageAttempts = 0
+    const MAX_SUBTASK_RETRIES = 2
+    
+    while (!pageSuccess && pageAttempts < MAX_SUBTASK_RETRIES) {
+      pageAttempts++
+      if (pageAttempts > 1) {
+        log(`  🔄 Retry ${pageAttempts}/${MAX_SUBTASK_RETRIES}: index.tsx`)
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      } else {
+        log(`  → Sub-task 1/${totalSubTasks}: index.tsx`)
+      }
+      pageSuccess = await buildModulePage(spec, typesContent, sharedUIContent, stepIndex)
+    }
+    
     if (!pageSuccess) {
+      log(`  ❌ Main page failed after ${MAX_SUBTASK_RETRIES} attempts`)
       setSubTaskProgress(null)
       return false
     }
@@ -710,19 +966,35 @@ code
     // Delay between sub-tasks
     await new Promise(resolve => setTimeout(resolve, 3000))
     
-    // Sub-task 2+: Each component
+    // Sub-task 2+: Each component (with retry)
+    
     for (let i = 0; i < spec.components.length; i++) {
       const componentName = spec.components[i]
       setSubTaskProgress({ current: i + 2, total: totalSubTasks, name: componentName })
-      // Restart timer for each sub-task
-      setStepStartTime(Date.now())
-      setStepEstimate(20)
-      setStepRemaining(20)
-      log(`  → Sub-task ${i + 2}/${totalSubTasks}: ${componentName}`)
       
-      const componentSuccess = await buildModuleComponent(spec, componentName, typesContent, sharedUIContent, stepIndex)
+      let componentSuccess = false
+      let attempts = 0
+      
+      while (!componentSuccess && attempts < MAX_SUBTASK_RETRIES) {
+        attempts++
+        
+        // Restart timer for each attempt
+        setStepStartTime(Date.now())
+        setStepEstimate(20)
+        setStepRemaining(20)
+        
+        if (attempts > 1) {
+          log(`  🔄 Retry ${attempts}/${MAX_SUBTASK_RETRIES}: ${componentName}`)
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        } else {
+          log(`  → Sub-task ${i + 2}/${totalSubTasks}: ${componentName}`)
+        }
+        
+        componentSuccess = await buildModuleComponent(spec, componentName, typesContent, sharedUIContent, stepIndex)
+      }
+      
       if (!componentSuccess) {
-        log(`  ⚠️ Component ${componentName} failed, continuing...`)
+        log(`  ⚠️ Component ${componentName} failed after ${MAX_SUBTASK_RETRIES} attempts, continuing...`)
       }
       
       // Delay between components
@@ -1142,9 +1414,37 @@ body {
     const { provider: stepProvider, model: stepModel } = getModelForStep(stepType, provider, model)
 
     try {
+      // Build prompt with self-healing context if on retry
+      let fullPrompt = `${systemPrompt}\n\n${prompt}`
+      if (retryContext?.code) {
+        fullPrompt = `${systemPrompt}
+
+## YOUR EXISTING CODE (what you generated)
+${retryContext.code}
+
+## TASK
+Fix the issues in the code above. You can either:
+1. Output complete replacement files using ---FILE-START path="..."--- format
+2. Output surgical patches using this format:
+---PATCH path="src/path/to/file.tsx"---
+OLD:
+\`\`\`
+exact code to find
+\`\`\`
+NEW:
+\`\`\`
+replacement code
+\`\`\`
+---END-PATCH---
+
+Patches are preferred for small fixes. Use full files only if major rewrite needed.
+
+${prompt}`
+      }
+      
       const result = await window.jett.claudeApi(
         apiKey,
-        JSON.stringify([{ role: 'user', content: `${systemPrompt}\n\n${prompt}` }]),
+        JSON.stringify([{ role: 'user', content: fullPrompt }]),
         undefined,
         stepProvider,
         stepModel
@@ -1176,6 +1476,13 @@ body {
         log(`  📄 Created: ${filePath}`)
         filesWritten++
         filesCreated.push(filePath)
+      }
+
+      // Also check for patches (self-healing mode)
+      const { applied: patchesApplied } = await applyPatches(result.text)
+      if (patchesApplied > 0) {
+        log(`  🔧 Applied ${patchesApplied} patches`)
+        setLastFileUpdate(Date.now())
       }
 
       // Check for explicit completion signal
@@ -1270,8 +1577,14 @@ body {
         
         if (attempts > 1) {
           log(`  🔄 Auto-fix attempt ${attempts}/${MAX_RETRIES}...`)
+          // Read existing code for self-healing context
+          log(`  📖 Reading generated files for context...`)
+          const codeContext = await readAllProjectFiles()
+          setRetryContext({ code: codeContext })
           // Brief pause before retry
           await new Promise(resolve => setTimeout(resolve, 1500))
+        } else {
+          setRetryContext(null)
         }
         
         success = await executeBuildStep(buildSteps[i], i)
@@ -1355,6 +1668,9 @@ body {
         setPreviewUrl(url)
         setPreviewFailed(false)
         log(`✅ Preview available at ${url}`)
+        
+        // v1.5.0: Run smoke test
+        runPostBuildTest(url)
       } else {
         setPreviewFailed(true)
         log(`❌ Server failed: ${result.error || 'Unknown error'}`)
@@ -1362,6 +1678,26 @@ body {
     } catch (error: any) {
       setPreviewFailed(true)
       log(`❌ Server error: ${error.message}`)
+    }
+  }
+
+  /**
+   * v1.5.0: Run smoke test after build completes
+   */
+  const runPostBuildTest = async (url: string) => {
+    log('🧪 Running smoke test...')
+    setTestStatus('running')
+    
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    
+    const result = await runSmokeTest(url)
+    
+    if (result.passed) {
+      setTestStatus('passed')
+      log('✅ Smoke test passed' + (result.duration ? ` (${result.duration}ms)` : ''))
+    } else {
+      setTestStatus('failed')
+      log(`❌ Smoke test failed: ${result.error}`)
     }
   }
 
@@ -1570,6 +1906,20 @@ body {
           
           {/* Open in Browser button + Total Time */}
           <div className="flex items-center gap-3">
+            {/* v1.5.0: Test status */}
+            {testStatus !== 'idle' && (
+              <div className={`flex items-center gap-2 text-sm px-2 py-1 rounded ${
+                testStatus === 'passed' ? 'text-green-500 bg-green-500/10' :
+                testStatus === 'failed' ? 'text-red-500 bg-red-500/10' :
+                'text-blue-500 bg-blue-500/10'
+              }`}>
+                {testStatus === 'running' && <IconClock size={14} className="animate-spin" />}
+                {testStatus === 'passed' && <IconCheck size={14} />}
+                {testStatus === 'failed' && <span>✕</span>}
+                <span>{testStatus === 'running' ? 'Testing...' : testStatus === 'passed' ? 'Tests passed' : 'Tests failed'}</span>
+              </div>
+            )}
+            
             {/* Total build time */}
             {(isBuilding || totalElapsed > 0) && (
               <div className="flex items-center gap-2 text-sm">

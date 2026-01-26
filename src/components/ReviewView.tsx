@@ -68,10 +68,18 @@ export default function ReviewView({
   // Combine all items
   const allItems = [...review.errors, ...review.improvements, ...simplifications]
   
+  // Filter to only show items belonging to current project
+  // Items must have a file path that starts with the project's expected paths
+  const projectScopedItems = allItems.filter(item => {
+    if (!item.file) return true // Keep items without file reference
+    // Only include if file is in src/ (standard project structure)
+    return item.file.startsWith('src/') || item.file.startsWith('pages/') || item.file.startsWith('components/')
+  })
+  
   // Filter by category
   const filteredItems = selectedCategory === 'all' 
-    ? allItems 
-    : allItems.filter(item => item.category === selectedCategory)
+    ? projectScopedItems 
+    : projectScopedItems.filter(item => item.category === selectedCategory)
 
   // Group by status for Kanban columns
   const todoItems = filteredItems.filter(i => i.status === 'open')

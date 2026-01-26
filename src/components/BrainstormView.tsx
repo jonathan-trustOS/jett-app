@@ -736,11 +736,41 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
     updateIdea(selectedIdea.id, { prdCaptures: updatedCaptures })
   }
 
-  // Promote to project
+  // Promote to project OR push all captures to current project
   const handlePromote = (idea: Idea) => {
     // Count items being pushed
     const totalItems = getTotalCaptures(idea)
     
+    // If we're inside a project (onPushCapture exists), add to current project
+    if (onPushCapture && currentProject) {
+      console.log(`📋 Pushing ${totalItems} captures to ${currentProject.name}...`)
+      
+      // Push each capture to the current project's PRD
+      Object.entries(idea.prdCaptures).forEach(([section, captures]) => {
+        (captures as PRDCapture[]).forEach(capture => {
+          if (!capture.pushed) {
+            onPushCapture(section, capture.content)
+          }
+        })
+      })
+      
+      // Mark all captures as pushed
+      const updatedCaptures = { ...idea.prdCaptures }
+      Object.keys(updatedCaptures).forEach(section => {
+        const key = section as keyof typeof updatedCaptures
+        updatedCaptures[key] = updatedCaptures[key].map(c => ({ ...c, pushed: true }))
+      })
+      
+      updateIdea(idea.id, { 
+        prdCaptures: updatedCaptures,
+        status: 'promoted' as const
+      })
+      
+      console.log(`✅ Pushed ${totalItems} items to ${currentProject.name}'s PRD`)
+      return
+    }
+    
+    // No current project - create a new one
     const prd = {
       overview: {
         name: idea.title,
@@ -793,8 +823,7 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
       status: 'promoted' as const
     })
     
-    // Brief success feedback
-    console.log(`✅ Pushed ${totalItems} items to PRD`)
+    console.log(`✅ Created new project with ${totalItems} items`)
   }
 
   // Status badge
@@ -1126,17 +1155,20 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
                 </p>
               </div>
               <div className="flex gap-2">
-                {/* Manual Extract Button */}
-                {lastBulkContent && !isExtracting && (
-                  <button
-                    onClick={() => extractCapturesFromContent(lastBulkContent, selectedIdea.id)}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1"
-                    style={{ background: 'var(--accent-primary-light)', color: 'var(--accent-primary)' }}
-                  >
-                    <IconSparkles size={14} />
-                    Extract Captures
-                  </button>
-                )}
+                {/* Capture Button */}
+                <button
+                  onClick={handleCaptureFromChat}
+                  disabled={!apiKey || isExtracting || selectedIdea.chat.length === 0}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-1"
+                  style={{ background: 'var(--accent-primary)', color: 'white' }}
+                  title="Scan chat for PRD content"
+                >
+                  {isExtracting ? (
+                    <>Scanning...</>
+                  ) : (
+                    <><IconSparkles size={14} /> Capture</>
+                  )}
+                </button>
                 <button
                   onClick={() => handleDeleteIdea(selectedIdea.id)}
                   className="p-2 rounded-lg"
@@ -1248,19 +1280,6 @@ Keep it conversational. Do NOT use any special formatting tags or brackets.`
                   <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                     PRD Captures
                   </h3>
-                  <button
-                    onClick={handleCaptureFromChat}
-                    disabled={!apiKey || isExtracting || selectedIdea.chat.length === 0}
-                    className="px-2 py-1 rounded text-xs font-medium disabled:opacity-50 flex items-center gap-1"
-                    style={{ background: 'var(--accent-primary)', color: 'white' }}
-                    title="Scan chat for PRD content"
-                  >
-                    {isExtracting ? (
-                      <>Scanning...</>
-                    ) : (
-                      <><IconSparkles size={12} /> Capture</>
-                    )}
-                  </button>
                 </div>
                 <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   {getTotalCaptures(selectedIdea)} items captured

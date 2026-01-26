@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('jett', {
     ipcRenderer.invoke('fs:read-file', projectId, filePath),
   listFiles: (projectId: string) => 
     ipcRenderer.invoke('fs:list-files', projectId),
+  patchFile: (projectId: string, filePath: string, oldStr: string, newStr: string) =>
+    ipcRenderer.invoke('fs:patch-file', projectId, filePath, oldStr, newStr),
+  readFileRaw: (projectId: string, filePath: string) =>
+    ipcRenderer.invoke('fs:read-file-raw', projectId, filePath),
   
   // Dev server
   runNpmInstall: (projectId: string) => ipcRenderer.invoke('run-npm-install', projectId),
@@ -53,6 +57,17 @@ contextBridge.exposeInMainWorld('jett', {
   claudeApi: (apiKey: string, messages: string, screenshot?: string, provider?: string, model?: string) =>
     ipcRenderer.invoke('claude-api', apiKey, messages, screenshot, provider, model),
   
+  // v1.5.0: Testing System
+  testing: {
+    // Run a Playwright test
+    run: (testCode: string, baseUrl?: string) =>
+      ipcRenderer.invoke('test:run', testCode, baseUrl),
+    
+    // Wait for dev server to be ready
+    waitForServer: (url?: string, timeout?: number) =>
+      ipcRenderer.invoke('test:wait-for-server', url, timeout)
+  },
+
   // Learning System
   learning: {
     // Get project context for prompt injection

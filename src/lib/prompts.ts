@@ -1,6 +1,8 @@
 /**
  * AI Prompts for Jett Build System
  * Centralized prompt management with dynamic context injection
+ * 
+ * v1.4.0 - Added pre-built components library (40 components)
  */
 
 // ============================================
@@ -102,6 +104,240 @@ function getDatabaseContext(): string {
 }
 
 // ============================================
+// APP INTEGRATIONS
+// ============================================
+
+// Check if OpenAI is configured
+export function getOpenAIConfig(): { apiKey: string } | null {
+  const apiKey = localStorage.getItem('openai_api_key')
+  if (apiKey) {
+    return { apiKey }
+  }
+  return null
+}
+
+// Check if Stripe is configured
+export function getStripeConfig(): { publishableKey: string; secretKey: string } | null {
+  const publishableKey = localStorage.getItem('stripe_publishable_key')
+  const secretKey = localStorage.getItem('stripe_secret_key')
+  if (publishableKey && secretKey) {
+    return { publishableKey, secretKey }
+  }
+  return null
+}
+
+// Check if Google Maps is configured
+export function getGoogleMapsConfig(): { apiKey: string } | null {
+  const apiKey = localStorage.getItem('google_maps_api_key')
+  if (apiKey) {
+    return { apiKey }
+  }
+  return null
+}
+
+// Check if SendGrid is configured
+export function getSendGridConfig(): { apiKey: string } | null {
+  const apiKey = localStorage.getItem('sendgrid_api_key')
+  if (apiKey) {
+    return { apiKey }
+  }
+  return null
+}
+
+// Generate OpenAI context for prompts
+function getOpenAIContext(): string {
+  const config = getOpenAIConfig()
+  if (!config) return ''
+  
+  return `
+
+OPENAI API AVAILABLE:
+The user has configured OpenAI for AI features. When the app needs AI capabilities:
+
+- Install: npm install openai
+- Initialize in lib/openai.ts:
+  import OpenAI from 'openai'
+  const openai = new OpenAI({ apiKey: '${config.apiKey}', dangerouslyAllowBrowser: true })
+  export { openai }
+- Use openai.chat.completions.create() for chat/text generation
+- Use openai.images.generate() for image generation
+- Include proper error handling and loading states
+- Consider rate limits and API costs`
+}
+
+// Generate Stripe context for prompts
+function getStripeContext(): string {
+  const config = getStripeConfig()
+  if (!config) return ''
+  
+  return `
+
+STRIPE PAYMENTS AVAILABLE:
+The user has configured Stripe for payments. When the app needs payment processing:
+
+- Install: npm install @stripe/stripe-js @stripe/react-stripe-js
+- Frontend setup in lib/stripe.ts:
+  import { loadStripe } from '@stripe/stripe-js'
+  export const stripePromise = loadStripe('${config.publishableKey}')
+- Wrap payment forms in <Elements stripe={stripePromise}>
+- Use CardElement or PaymentElement for card input
+- Backend/API routes need the secret key for charges
+- Include proper error handling for failed payments
+- Consider test mode (pk_test_/sk_test_) vs live mode`
+}
+
+// Generate Google Maps context for prompts
+function getGoogleMapsContext(): string {
+  const config = getGoogleMapsConfig()
+  if (!config) return ''
+  
+  return `
+
+GOOGLE MAPS AVAILABLE:
+The user has configured Google Maps for location features. When the app needs maps:
+
+- Install: npm install @react-google-maps/api
+- Initialize in components:
+  import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api'
+  <LoadScript googleMapsApiKey="${config.apiKey}">
+    <GoogleMap center={center} zoom={10}>
+      <Marker position={position} />
+    </GoogleMap>
+  </LoadScript>
+- Use Places API for location search/autocomplete
+- Use Geocoding API for address to coordinates
+- Include proper loading states while map loads`
+}
+
+// Generate SendGrid context for prompts
+function getSendGridContext(): string {
+  const config = getSendGridConfig()
+  if (!config) return ''
+  
+  return `
+
+SENDGRID EMAIL AVAILABLE:
+The user has configured SendGrid for email. When the app needs to send emails:
+
+- SendGrid requires a backend/API route (cannot be called from browser)
+- In API route or serverless function:
+  import sgMail from '@sendgrid/mail'
+  sgMail.setApiKey('${config.apiKey}')
+  await sgMail.send({
+    to: 'recipient@example.com',
+    from: 'verified-sender@yourdomain.com',
+    subject: 'Hello',
+    html: '<p>Email content</p>'
+  })
+- The 'from' address must be verified in SendGrid
+- Include proper error handling for failed sends
+- Consider email templates for consistent styling`
+}
+
+// Get combined integrations context
+function getIntegrationsContext(): string {
+  return [
+    getOpenAIContext(),
+    getStripeContext(),
+    getGoogleMapsContext(),
+    getSendGridContext()
+  ].filter(Boolean).join('')
+}
+
+// ============================================
+// PRE-BUILT COMPONENTS LIBRARY
+// ============================================
+
+/**
+ * Pre-built components context for AI code generation
+ * 40 production-ready React + TypeScript components
+ */
+export const PREBUILT_COMPONENTS_CONTEXT = `
+PRE-BUILT COMPONENTS LIBRARY:
+You have access to 40 production-ready React + TypeScript components.
+USE THESE instead of generating from scratch - they're optimized, accessible, and tested.
+
+IMPORT PATTERN:
+import { ComponentName } from '@/components/prebuilt/{category}'
+
+AVAILABLE COMPONENTS:
+
+Core (5) - Essential app infrastructure:
+- AuthFlow - Login/signup/password reset flow
+- DataTable - Sortable, filterable table with pagination
+- NotesSystem - Rich notes with folders and search
+- SettingsPage - Organized settings with sections
+- UserProfile - Editable profile with avatar upload
+Import: import { AuthFlow, DataTable, NotesSystem, SettingsPage, UserProfile } from '@/components/prebuilt/core'
+
+Content (5) - Rich content display and editing:
+- CalendarView - Month/week/day calendar with events
+- KanbanBoard - Drag-and-drop kanban board
+- RichTextEditor - WYSIWYG text editor
+- Timeline - Vertical timeline display
+- TodoList - Interactive todo with categories
+Import: import { CalendarView, KanbanBoard, RichTextEditor, Timeline, TodoList } from '@/components/prebuilt/content'
+
+Social (4) - User interaction and engagement:
+- CommentsThread - Threaded comments with replies
+- FollowSystem - Follow/unfollow with counts
+- LikesSystem - Like button with animation
+- ShareModal - Social sharing modal
+Import: import { CommentsThread, FollowSystem, LikesSystem, ShareModal } from '@/components/prebuilt/social'
+
+Media (4) - Audio, video, images, and files:
+- AudioPlayer - Custom audio player with controls
+- FileUploader - Drag-and-drop file upload
+- ImageGallery - Lightbox image gallery
+- VideoPlayer - Custom video player
+Import: import { AudioPlayer, FileUploader, ImageGallery, VideoPlayer } from '@/components/prebuilt/media'
+
+Navigation (6) - App navigation and routing:
+- Breadcrumbs - Navigation breadcrumb trail
+- CommandPalette - ⌘K command palette
+- MobileBottomNav - Mobile bottom navigation
+- Sidebar - Collapsible sidebar
+- SidebarNav - Enhanced sidebar with nested items
+- Tabs - Tabbed interface
+Import: import { Breadcrumbs, CommandPalette, MobileBottomNav, Sidebar, SidebarNav, Tabs } from '@/components/prebuilt/navigation'
+
+Dashboard (4) - Data visualization and metrics:
+- ActivityFeed - Real-time activity feed
+- Chart - Line, bar, area charts
+- ProgressRing - Circular progress indicator
+- StatsCard - Metric display card
+Import: import { ActivityFeed, Chart, ProgressRing, StatsCard } from '@/components/prebuilt/dashboard'
+
+E-commerce (4) - Shopping and payment:
+- CheckoutForm - Multi-step checkout
+- PricingTable - Pricing comparison table
+- ProductCard - E-commerce product card
+- ShoppingCart - Shopping cart sidebar
+Import: import { CheckoutForm, PricingTable, ProductCard, ShoppingCart } from '@/components/prebuilt/ecommerce'
+
+WHEN TO USE PRE-BUILT vs GENERATE CUSTOM:
+- USE PRE-BUILT: Auth flows, data tables, kanban boards, calendars, charts, todos, comments, file uploads, navigation
+- GENERATE CUSTOM: Highly specific UI, brand-specific designs, unique interactions not covered above
+
+USAGE EXAMPLES:
+// Authentication
+import { AuthFlow } from '@/components/prebuilt/core'
+<AuthFlow appName="MyApp" onAuth={handleAuth} />
+
+// Data display with sorting/filtering
+import { DataTable } from '@/components/prebuilt/core'
+<DataTable columns={columns} data={users} onRowClick={handleSelect} />
+
+// Kanban project board
+import { KanbanBoard } from '@/components/prebuilt/content'
+<KanbanBoard columns={projectColumns} onCardMove={handleMove} />
+
+// Dashboard stats
+import { StatsCard, Chart, ProgressRing } from '@/components/prebuilt/dashboard'
+<StatsCard title="Revenue" value="$12,450" trend={12} />
+`
+
+// ============================================
 // COMPLETION SIGNALS
 // ============================================
 
@@ -145,6 +381,7 @@ export function parseCompletionSignal(response: string): {
 // Base system prompt for code generation
 export function getSystemPrompt(): string {
   const databaseContext = getDatabaseContext()
+  const integrationsContext = getIntegrationsContext()
   
   return `You are a code generator. Output files using this EXACT format:
 
@@ -158,7 +395,9 @@ RULES:
 - Import types from '@/types'
 - Import shared UI from '@/components/ui'
 - Every file must be complete and runnable
+${PREBUILT_COMPONENTS_CONTEXT}
 ${databaseContext}
+${integrationsContext}
 
 COMPLETION SIGNALS:
 After generating all files for a task, you MUST end your response with ONE of:
@@ -182,6 +421,16 @@ export function getConfiguredDatabase(): 'supabase' | 'convex' | null {
   if (getSupabaseConfig()) return 'supabase'
   if (getConvexConfig()) return 'convex'
   return null
+}
+
+// Get list of configured integrations
+export function getConfiguredIntegrations(): string[] {
+  const integrations: string[] = []
+  if (getOpenAIConfig()) integrations.push('openai')
+  if (getStripeConfig()) integrations.push('stripe')
+  if (getGoogleMapsConfig()) integrations.push('googlemaps')
+  if (getSendGridConfig()) integrations.push('sendgrid')
+  return integrations
 }
 
 // ============================================

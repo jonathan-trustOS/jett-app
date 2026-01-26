@@ -3,6 +3,10 @@ import { fileURLToPath } from 'url'
 import path from 'path'
 import fs from 'fs'
 import { spawn, ChildProcess } from 'child_process'
+import { validatePath, checkRateLimit, sanitizeForShell } from './security'
+import { migrateToSecureStorage, storeSecureKey, getSecureKey } from './keychain'
+// v1.5.0: Playwright for functional testing
+import { initPlaywright, closePlaywright, runTest, waitForDevServer } from './testing'
 
 // Learning system imports
 import {
@@ -137,9 +141,30 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // v1.5.0: Migrate keys to secure storage on startup
+  migrateToSecureStorage().then(({ migrated, failed }) => {
+    if (migrated.length > 0) {
+      console.log('Migrated keys to secure storage:', migrated)
+    }
+    if (failed.length > 0) {
+      console.warn('Failed to migrate keys:', failed)
+    }
+  })
+
+  // v1.5.0: Initialize Playwright for testing
+  initPlaywright().catch(err => {
+    console.warn('Playwright init failed (testing disabled):', err.message)
+  })
+
   createWindow()
   registerHistoryHandlers()
 })
+
+// v1.5.0: Clean up Playwright on quit
+app.on('will-quit', async () => {
+  await closePlaywright()
+})
+
 app.on('window-all-closed', () => {
   stopDevServer()
   if (process.platform !== 'darwin') app.quit()
@@ -255,6 +280,10 @@ ipcMain.handle('storage:delete-project', async (_event, projectId: string) => {
   
   // Delete project folder
   const projectDir = path.join(getProjectsDir(), projectId)
+  // v1.5.0: Security - validate path
+  if (!validatePath(projectDir)) {
+    return false
+  }
   if (fs.existsSync(projectDir)) {
     fs.rmSync(projectDir, { recursive: true })
   }
@@ -317,6 +346,10 @@ ipcMain.handle('fs:write-file', async (_event, projectId: string, filePath: stri
   try {
     const projectDir = getProjectDir(projectId)
     const fullPath = path.join(projectDir, filePath)
+    // v1.5.0: Security - validate path
+    if (!validatePath(fullPath)) {
+      return { success: false, error: 'Access denied: Path not allowed' }
+    }
     const dir = path.dirname(fullPath)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(fullPath, content, 'utf-8')
@@ -329,8 +362,11 @@ ipcMain.handle('fs:write-file', async (_event, projectId: string, filePath: stri
 ipcMain.handle('fs:read-file', async (_event, projectId: string, filePath: string) => {
   try {
     const fullPath = path.join(getProjectDir(projectId), filePath)
+    // v1.5.0: Security - validate path
+    if (!validatePath(fullPath)) {
+      return { success: false, error: 'Access denied: Path not allowed' }
+    }
     const content = fs.readFileSync(fullPath, 'utf-8')
-    return { success: true, content }
   } catch (error: any) {
     return { success: false, error: error.message }
   }
@@ -356,6 +392,25 @@ ipcMain.handle('fs:list-files', async (_event, projectId: string) => {
     return { success: true, files }
   } catch (error: any) {
     return { success: false, error: error.message, files: [] }
+  }
+})
+
+// Patch file - surgical find/replace for self-healing
+ipcMain.handle('fs:patch-file', async (_event, projectId: string, filePath: string, oldStr: string, newStr: string) => {
+  try {
+    const fullPath = path.join(getProjectDir(projectId), filePath)
+    const content = fs.readFileSync(fullPath, 'utf-8')
+    
+    if (!content.includes(oldStr)) {
+      return { success: false, error: 'String not found in file' }
+    }
+    
+    // Replace first occurrence only (surgical edit)
+    const newContent = content.replace(oldStr, newStr)
+    fs.writeFileSync(fullPath, newContent, 'utf-8')
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message }
   }
 })
 
@@ -1451,4 +1506,28 @@ ipcMain.handle('errors:quick-fix', async (_event, error: DetectedError) => {
 // Get AI prompt for error fixing
 ipcMain.handle('errors:get-fix-prompt', async () => {
   return { success: true, prompt: AI_ERROR_FIX_PROMPT }
+})
+
+// =============================================================================
+// v1.5.0: TESTING IPC HANDLERS
+// =============================================================================
+
+// Run Playwright test
+ipcMain.handle('test:run', async (_event, testCode: string, baseUrl?: string) => {
+  try {
+    const result = await runTest(testCode, { baseUrl: baseUrl || 'http://localhost:5174' })
+    return { success: true, result }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
+})
+
+// Wait for dev server to be ready
+ipcMain.handle('test:wait-for-server', async (_event, url?: string, timeout?: number) => {
+  try {
+    const ready = await waitForDevServer(url, timeout)
+    return { success: true, ready }
+  } catch (error: any) {
+    return { success: false, error: error.message }
+  }
 })
